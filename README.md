@@ -198,11 +198,11 @@ Search for all Windows Packages installed on an offline NanoServer image.
 Get-Package -ProviderName NanoServerPackage -FromVhd C:\OfflineVhd.vhd -DisplayCulture
 ```
 
-### Version
-0.1.0.0
+## Version
+0.1.1.0
 
-### Version History
-#### 0.1.0.0
+## Version History
+#### 0.1.1.0
 Initial public release for Nano Package Providers
 
 ### Dependencies
