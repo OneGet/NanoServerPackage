@@ -1,5 +1,5 @@
 # NanoServerPackage Provider
-A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to find and install Optional Windows Packages (Windows feature and role) for NanoServer. For general information about these packages, please refer to the <a href="https://technet.microsoft.com/en-us/library/mt126167.aspx">guide on Getting Started with Nano Server</a>.
+A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to find and install Optional Windows Packages (Windows feature and role) for NanoServer. For general information about these packages, please refer to the <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a>.
 
 ## Installing the provider
 You can install the provider from PowerShellGallery using the following PackageManagement commands:
@@ -209,7 +209,7 @@ Initial public release for Nano Package Providers
 This module has no dependencies
 
 ## Known Issues
-1. You might see an error as shown below while installing certain packages. This is mainly because this provider does not support discovering and installing dependencies. For these cases, refer to <a href="https://technet.microsoft.com/en-us/library/mt126167.aspx">guide on Getting Started with Nano Server</a> to identify the dependencies.
+1. You might see an error as shown below while installing certain packages. This is mainly because this provider does not support discovering and installing dependencies. For these cases, refer to <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a> to identify the dependencies.
 ```
 install-package : Add-WindowsPackage failed. Error code = 0x800f0922
     + CategoryInfo          : InvalidOperation: (System.String[]:String) [Install-Package], Exception
