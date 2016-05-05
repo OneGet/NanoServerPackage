@@ -215,3 +215,4 @@ install-package : Add-WindowsPackage failed. Error code = 0x800f0922
     + CategoryInfo          : InvalidOperation: (System.String[]:String) [Install-Package], Exception
     + FullyQualifiedErrorId : FailedToInstall,Install-PackageHelper,Microsoft.PowerShell.PackageManagement.Cmdlets.InstallPackage
 ```
+2. This provider does not support PowerShell Direct session.
