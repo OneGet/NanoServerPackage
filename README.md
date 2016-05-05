@@ -216,4 +216,5 @@ install-package : Add-WindowsPackage failed. Error code = 0x800f0922
     + CategoryInfo          : InvalidOperation: (System.String[]:String) [Install-Package], Exception
     + FullyQualifiedErrorId : FailedToInstall,Install-PackageHelper,Microsoft.PowerShell.PackageManagement.Cmdlets.InstallPackage
 ```
+3. To install Microsoft-NanoServer-IIS-Package online, you will have to install Microsoft-NanoServer-Storage-Package first.
 
