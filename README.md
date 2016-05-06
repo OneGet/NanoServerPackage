@@ -212,7 +212,9 @@ This module has no dependencies
 1. This provider does not support PowerShell Direct session.
 
 2. Currently, you cannot install Microsoft-NanoServer-IIS-Package and Microsoft-NanoServer-SCVMM-Package online. There are two workarounds:
+
     i. Install another package that will require reboot such as Microsoft-NanoServer-Storage-Package first and without rebooting, install the required package.
+    
     ii. Install these packages offline using -ToVhd
 
 3. You might see an error as shown below while installing certain packages. This is mainly because this provider does not support discovering and installing dependencies. For these cases, refer to <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a> to identify the dependencies.
