@@ -15,9 +15,10 @@ $script:downloadedCabLocation = "$script:WindowsPackage\DownloadedCabs"
 $script:file_modules = "$script:WindowsPackage\sources.txt"
 $script:windowsPackageSources = $null
 $script:defaultPackageName = "NanoServerPackageSource"
-$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=730617&clcid=0x409"
+$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=708783&clcid=0x409"
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
+$script:availablePackages = @()
 $separator = "|#|"
 
 #endregion Script variables
@@ -57,14 +58,15 @@ function Find-NanoServerPackage
         $Force
     )
     
-    Find -Name $Name `
-        -MinimumVersion $MinimumVersion `
-        -MaximumVersion $MaximumVersion `
-        -RequiredVersion $RequiredVersion `
-        -AllVersions:$AllVersions `
-        -Culture $Culture `
-        -Force:$Force
-#        -Repository $Repository
+    $PSBoundParameters["Provider"] = $script:providerName
+
+    $packages = PackageManagement\Find-Package @PSBoundParameters
+
+    foreach($package in $packages) {
+        Microsoft.PowerShell.Utility\Add-Member -InputObject $package -MemberType NoteProperty -Name "Description" -Value $package.Summary
+        $package.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo") | Out-Null
+        $package
+    }
 }
 
 function Save-NanoServerPackage
@@ -251,74 +253,95 @@ function Save-NanoServerPackage
                 Write-Error "No results found for $listOfNames"
                 return
             }
-
-            foreach($result in $findResults)
+            
+            foreach($findResult in $findResults)
             {
-                $currLang = $result.Culture
+                $dependenciesToBeInstalled = [System.Collections.ArrayList]::new()
+                
+                if (-not (Get-DependenciesToInstall -availablePackages $script:availablePackages -culture $Culture -package $findResult -dependenciesToBeInstalled $dependenciesToBeInstalled)) {
+                    return
+                }
 
-                # Base Installer
-                $fileName_base = Get-FileName -name $result.Name `
-							                    -Culture "" `
-							                    -version $result.Version.ToString()
+                foreach ($result in $dependenciesToBeInstalled) {
+                    $currLang = $result.Culture
 
-                $destination_base = Join-Path $destinationPath $fileName_base
+                    $skipBase = $false
 
-                if($PSCmdlet.ShouldProcess($fileName_base, "Save-NanoServerPackage"))
-                {
-                    if(Test-Path $destination_base)
-                    {
-                        if($Force)
+                    # check whether base package is in list of available packages, if so, don't save
+                    foreach ($availablePackage in $script:availablePackages) {
+                        if (Test-PackageWithSearchQuery -fullyQualifiedName $availablePackage -name $result.Name -requiredVersion $result.Version -Culture "Base")
                         {
-                            Remove-Item $destination_base
+                            # if it is, no need to download base installer
+                            $skipBase = $true
+                        }                        
+                    }
 
-                            $token = $result.Locations.base
-                            DownloadFile -downloadURL $token -destination $destination_base
+                    if (-not $skipBase) {
+                        # Base Installer
+                        $fileName_base = Get-FileName -name $result.Name `
+							                            -Culture "" `
+							                            -version $result.Version.ToString()
+
+                        $destination_base = Join-Path $destinationPath $fileName_base
+
+                        if($PSCmdlet.ShouldProcess($fileName_base, "Save-NanoServerPackage"))
+                        {
+                            if(Test-Path $destination_base)
+                            {
+                                if($Force)
+                                {
+                                    Remove-Item $destination_base
+
+                                    $token = $result.Locations.base
+                                    DownloadFile -downloadURL $token -destination $destination_base
+                                }
+                                else
+                                {
+                                    # The file exists, not downloading
+                                    Write-Information "$fileName_base already existsat $destinationPath. Skipping save."
+                                }
+                            }
+                            else
+                            {
+                                $token = $result.Locations.base
+                                DownloadFile -downloadURL $token -destination $destination_base
+                            }
+                        }
+                    }
+
+                    # Language Installer
+                    $fileName_lang = Get-FileName -name $result.Name `
+							                        -Culture $currLang `
+							                        -version $result.Version.ToString()
+
+                    $destination_lang = Join-Path $destinationPath $fileName_lang
+
+                    if($PSCmdlet.ShouldProcess($fileName_lang, "Save-NanoServerPackage"))
+                    {
+                        if(Test-Path $destination_lang)
+                        {
+                            if($Force)
+                            {
+                                Remove-Item $destination_lang
+
+                                $token = $result.Locations.$currLang
+                                DownloadFile -downloadURL $token -destination $destination_lang
+                            }
+                            else
+                            {
+                                # The file exists, not downloading
+                                Write-Information "$fileName_lang already exists at $destinationPath. Skipping save."
+                            }
                         }
                         else
                         {
-                            # The file exists, not downloading
-                            Write-Information "$fileName_base already existsat $destinationPath. Skipping save."
-                        }
-                    }
-                    else
-                    {
-                        $token = $result.Locations.base
-                        DownloadFile -downloadURL $token -destination $destination_base
-                    }
-                }
-
-                # Language Installer
-                $fileName_lang = Get-FileName -name $result.Name `
-							                    -Culture $currLang `
-							                    -version $result.Version.ToString()
-
-                $destination_lang = Join-Path $destinationPath $fileName_lang
-
-                if($PSCmdlet.ShouldProcess($fileName_lang, "Save-NanoServerPackage"))
-                {
-                    if(Test-Path $destination_lang)
-                    {
-                        if($Force)
-                        {
-                            Remove-Item $destination_lang
-
                             $token = $result.Locations.$currLang
                             DownloadFile -downloadURL $token -destination $destination_lang
                         }
-                        else
-                        {
-                            # The file exists, not downloading
-                            Write-Information "$fileName_lang already exists at $destinationPath. Skipping save."
-                        }
                     }
-                    else
-                    {
-                        $token = $result.Locations.$currLang
-                        DownloadFile -downloadURL $token -destination $destination_lang
-                    }
-                }
 
-                $result
+                    $result
+                }
             }
             
         }
@@ -421,7 +444,7 @@ function Install-NanoServerPackage
         $packagesToBeInstalled = @()
 
         # do a find first, if there are any errors, don't install
-        $packagesToBeInstalled += (Find-NanoServerPackage -Name $Name -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion -RequiredVersion $RequiredVersion `
+        $packagesToBeInstalled += (Find -Name $Name -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion -RequiredVersion $RequiredVersion `
             -Culture $Culture -ErrorAction Stop) # -Repository $Repository
 
         if ($packagesToBeInstalled.Count -eq 0)
@@ -691,11 +714,25 @@ function Find-Azure
             $obj | Add-Member NoteProperty Name $searchStuffEntry.Name
             $obj | Add-Member NoteProperty Version $searchStuffEntry.Version
             $obj | Add-Member NoteProperty Description $searchStuffEntry.Description
-            
+            $obj | Add-Member NoteProperty SKU $searchStuffEntry.Sku
+
             $languageObj = New-Object PSObject
             $languageDictionary = $searchStuffEntry.Language
             $languageDictionary.Keys | ForEach-Object {
                 $languageObj | Add-Member NoteProperty $_ $languageDictionary.Item($_)
+            }
+
+            # process dependencies
+            if ($searchStuffEntry.ContainsKey("Dependencies")) {
+                $dependencies = @()
+                foreach ($dep in $searchStuffEntry.Dependencies) {
+                    $depObject = New-Object PSObject
+                    $depObject | Add-Member NoteProperty Name $dep.Name
+                    $depObject | Add-Member NoteProperty Version $dep.Version
+                    $dependencies += $depObject
+                }
+
+                $obj | Add-Member NoteProperty Dependencies $dependencies
             }
 
             $obj | Add-Member NoteProperty Language $languageObj
@@ -864,6 +901,13 @@ function Find-Azure
         $langDict = $searchEntry.Language
         $props= Get-Member -InputObject $langDict -MemberType NoteProperty
         $theSource = $Repository.Name
+        $sku = [string]::Join(";", @($searchEntry.Sku))
+
+        $dependencies = @()
+        $dependenciesProperty = Get-Member -InputObject $searchEntry -MemberType NoteProperty -Name Dependencies
+        if ($null -ne $dependenciesProperty) {
+            $dependencies = $searchEntry.Dependencies
+        }
 
         if (-not [string]::IsNullOrWhiteSpace($Culture))
         {
@@ -890,6 +934,8 @@ function Find-Azure
                 Source = $theSource
                 Locations = $languageObj
                 Culture = $Culture
+                Sku = $sku
+                Dependencies = $dependencies
             })
             $ResultEntry.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo")
             $searchLanguageResults += $ResultEntry
@@ -916,6 +962,8 @@ function Find-Azure
                 Source = $theSource
                 Locations = $langDict
                 Culture = $langListString
+                Sku = $sku
+                Dependencies = $dependencies
             })
             $ResultEntry.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo")
             $searchLanguageResults += $ResultEntry
@@ -931,19 +979,20 @@ function Find-Azure
 function DownloadFile
 {
     [CmdletBinding()]
-    param($downloadURL, $destination)
+    param($downloadURL, $destination, [switch]$noProgress)
     
     $startTime = Get-Date
 
     try
     {
         # Download the file
-	Write-Verbose "Downloading $downloadUrl to $destination"
-	$saveItemPath = $PSScriptRoot + "\SaveHTTPItemUsingBITS.psm1"
-	Import-Module "$saveItemPath"
-	Save-HTTPItemUsingBitsTransfer -Uri $downloadURL `
-					-Destination $destination
-	Write-Verbose "Finished downloading"
+	    Write-Verbose "Downloading $downloadUrl to $destination"
+	    $saveItemPath = $PSScriptRoot + "\SaveHTTPItemUsingBITS.psm1"
+	    Import-Module "$saveItemPath"
+	    Save-HTTPItemUsingBitsTransfer -Uri $downloadURL `
+					    -Destination $destination `
+                        -NoProgress:$noProgress
+	    Write-Verbose "Finished downloading"
 
         $endTime = Get-Date
         $difference = New-TimeSpan -Start $startTime -End $endTime
@@ -1060,7 +1109,7 @@ function Install-PackageHelper
             }
             # check whether language pack is installed
             elseif (Test-PackageWithSearchQuery -fullyQualifiedName $availablePackage -name $packageName -requiredVersion $RequiredVersion -minimumVersion $MinimumVersion -maximumVersion $MaximumVersion -Culture $Culture)
-           {
+            {
                 $languageVersion = Convert-Version ($availablePackage.Split('~')[4])
             }
         }
@@ -1098,26 +1147,31 @@ function Install-PackageHelper
             }
 
             Write-Verbose "Downloading cab files to $destinationFolder"
-            $savedPackages = Save-NanoServerPackage -Name $packageName -Culture $Culture -RequiredVersion $RequiredVersion -MinimumVersion $MinimumVersion `
-                                                -MaximumVersion $MaximumVersion -Path $destinationFolder -Force
+            try {
+                $script:availablePackages = $availablePackages
+                $savedPackages = Save-NanoServerPackage -Name $packageName -Culture $Culture -RequiredVersion $RequiredVersion -MinimumVersion $MinimumVersion `
+                                                    -MaximumVersion $MaximumVersion -Path $destinationFolder -Force
+            }
+            finally {
+                $script:availablePackages = @()
+            }
         }
 
         $savedCabFilesToInstall = @()
 
         foreach ($savedPackage in $savedPackages)
         {
-            # we only proceed to install to base if -force is true or if base is not already installed
-            # the base version needs to match the package version, otherwise we have to download the newer base version (so it matches the language version)
-            if ($Force -or (-not $baseVersion -eq $savedPackage.Version))
-            {
-                $savedCabFilesToInstall += (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture "" -version $savedPackage.Version))
+            # proceed with installation
+            $basePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture "" -version $savedPackage.Version))
+
+            if (Test-Path $basePackageFile) {
+                $savedCabFilesToInstall += $basePackageFile
             }
 
-            # we only proceed to install to language if -force is true or if language is not already installed
-            if ($Force -or (-not $languageVersion -eq $savedPackage.Version))
-            {
-                $savedCabFilesToInstall += (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture $Culture -version $savedPackage.Version))
+            $languagePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture $Culture -version $savedPackage.Version))
 
+            if (Test-Path $languagePackageFile) {
+                $savedCabFilesToInstall += $languagePackageFile
                 $installedWindowsPackages += $savedPackage
             }
         }
@@ -1287,12 +1341,14 @@ function Get-SearchIndex
     {
         Remove-Item $destination
         DownloadFile -downloadURL $fullUrl `
-                -destination $destination
+                -destination $destination `
+                -noProgress
     }
     else
     {
         DownloadFile -downloadURL $fullUrl `
-                    -destination $destination
+                    -destination $destination `
+                    -noProgress
     }
     
     return $destination
@@ -1391,6 +1447,93 @@ function Resolve-PathHelper
     }
 
     $resolvedPaths
+}
+
+### Function to get package dependencies that need to be install
+### This will return false if there is a dependency loop
+function Get-DependenciesToInstall($availablePackages, $culture, [psobject]$package, [System.Collections.ArrayList]$dependenciesToBeInstalled)
+{
+    # no dependencies to be installed
+    if ($null -eq $package.Dependencies -or $package.Dependencies.Count -eq 0) {
+        $dependenciesToBeInstalled.Add($package) | Out-NUll
+        return $true
+    }
+
+    $permanentlyMarked = [System.Collections.ArrayList]::new()
+    $temporarilyMarked = [System.Collections.ArrayList]::new()
+
+    if (-not (DepthFirstVisit -package $package `
+                            -temporarilyMarked $temporarilyMarked `
+                            -permanentlyMarked $permanentlyMarked `
+                            -dependenciesToBeInstalled $dependenciesToBeInstalled `
+                            -culture $culture `
+                            -availablePackages $availablePackages)) {
+        return $false
+    }
+
+    return $true
+}
+
+function DepthFirstVisit(
+    [psobject]$package,
+    [System.Collections.ArrayList]$permanentlyMarked,
+    [System.Collections.ArrayList]$temporarilyMarked,
+    [System.Collections.ArrayList]$dependenciesToBeInstalled,
+    $culture,
+    $availablePackages) {
+    
+    # get the hash of the package which is name!#!version
+    $hash = $package.Name.ToLower() + "!#!" + (Convert-Version $package.Version)
+
+    if ($temporarilyMarked.IndexOf($hash) -ge 0) {
+        # dependency loop!
+        return $false        
+    }
+
+    # no need to visit permanently marked node
+    if ($permanentlyMarked.IndexOf($hash) -ge 0) {
+        return $true
+    }
+
+    $temporarilyMarked.Add($hash) | Out-Null
+
+    foreach ($dependency in $package.Dependencies) {
+        $skip = $false
+
+        # check which dependencies are already installed
+        foreach ($availablePackage in $availablePackages)
+        {
+            # check whether language pack is installed (don't need to check base because if language pack is installed then base must be there)
+            if (Test-PackageWithSearchQuery -fullyQualifiedName $availablePackage -name $dependency.Name -requiredVersion $dependency.Version -Culture $culture)
+            {
+                # if it is, skipped this dependency
+                $skip = $true
+            }
+        }
+
+        if ($skip) {
+            continue
+        }
+
+        $dependencyPackage = Find-NanoServerPackage -Name $dependency.Name -RequiredVersion $dependency.Version -Culture $culture
+
+        if (-not (DepthFirstVisit -package $dependencyPackage -permanentlyMarked $permanentlyMarked `
+                -temporarilyMarked $temporarilyMarked -culture $culture `
+                -availablePackages $availablePackages -dependenciesToBeInstalled $dependenciesToBeInstalled)) {
+            return $false
+        }
+    }
+
+    # add to list to install later
+    $dependenciesToBeInstalled.Add($package) | Out-Null
+
+    # mark the node permanently
+    $permanentlyMarked.Add($hash) | Out-Null
+
+    # remove the temporary mark
+    $temporarilyMarked.Remove($hash) | Out-Null
+
+    return $true
 }
 
 #endregion Helpers
@@ -1902,12 +2045,14 @@ function Find-Package
         $Name = @('*')
     }
 
-    $packages = Find-NanoServerPackage -Name $Name `
-                                    -Culture $languageChosen `
-                                    -RequiredVersion $convertedRequiredVersion `
-                                    -MinimumVersion $convertedMinVersion `
-                                    -MaximumVersion $convertedMaxVersion `
-                                    -AllVersions:$allVersions
+    $packages = Find -Name $Name `
+        -MinimumVersion $convertedMinVersion `
+        -MaximumVersion $convertedMaxVersion `
+        -RequiredVersion $convertedRequiredVersion `
+        -AllVersions:$AllVersions `
+        -Culture $languageChosen `
+        -Force:$Force
+#        -Repository $Repository
 
     if ($null -eq $packages)
     {
@@ -1939,6 +2084,8 @@ function Install-Package
     $options = $request.Options
 
     $NoRestart = $false
+
+    $force = $false
 
     # check out what options the users give us
     if($options)
@@ -2003,6 +2150,8 @@ function Install-Package
 
     $mountDrive = $null
 
+    $availablePackages = @()
+
     if (-not [string]::IsNullOrWhiteSpace($imagePath))
     {
         $mountDrive = New-MountDrive
@@ -2010,6 +2159,17 @@ function Install-Package
         Write-Verbose "Mounting $imagePath to $mountDrive"
 
         $null = Mount-WindowsImage -ImagePath $imagePath -Index 1 -Path $mountDrive
+        
+        if (-not $force) {
+            $fileKey = Get-FileKey -filePath $imagePath
+          
+            $availablePackages = @(($script:imagePathCache[$fileKey]).Keys)
+        }
+    }
+    else {
+        if (-not $force) {
+            $availablePackages = @($script:onlinePackageCache.Keys)
+        }
     }
 
     try
@@ -2019,7 +2179,8 @@ function Install-Package
                                                     -Version $convertedVersion `
                                                     -mountDrive $mountDrive `
                                                     -successfullyInstalled ([ref]$success) `
-                                                    -NoRestart:$NoRestart
+                                                    -NoRestart:$NoRestart `
+                                                    -availablePackages: $availablePackages
 
         foreach ($installedPackage in $installedPackages)
         {        
@@ -2211,7 +2372,7 @@ function Get-InstalledPackage
         }
 
         Write-Progress -Activity "Mounting $imagePath to $mountDrive" -PercentComplete 0 -Id $id
-
+        $
         Mount-WindowsImage -ImagePath $imagePath -Index 1 -Path $mountDrive
 
         Write-Verbose "Done Mounting"
@@ -2252,8 +2413,19 @@ function Get-InstalledPackage
 
             $packageDictionary = $script:imagePathCache[$fileKey]
 
+            foreach ($fullyQualifiedName in $availablePackages)
+            {
+                if (-not $packageDictionary.ContainsKey($fullyQualifiedName))
+                {
+                    $packageDictionary[$fullyQualifiedName] = $null
+                }
+            }
+
             # Before we get more details, we will clump together base and language pack if they have same name and version
-            $packagesToBeReturned = Filter-Packages $packagesToBeReturned
+            if ($packagesToBeReturned.Count -gt 0)
+            {
+                $packagesToBeReturned = Filter-Packages $packagesToBeReturned
+            }
 
             foreach ($package in $packagesToBeReturned)
             {
@@ -2267,7 +2439,7 @@ function Get-InstalledPackage
                     -Id $id                
 
                 # store the information in cache if it's not there or if user uses force
-                if (-not $packageDictionary.ContainsKey($package) -or $force)
+                if ((-not $packageDictionary.ContainsKey($package)) -or ($null -eq $packageDictionary[$package]) -or $force)
                 {
                     Write-Debug "Getting information for package $package and storing it in cache"
                     # store the information in cache
@@ -2332,16 +2504,19 @@ function Get-InstalledPackage
                     # Store the whole name instead of just the name without language or version
                     $packagesToBeReturned.Add($fullyQualifiedName)
                 }
+
+                if (-not ($script:onlinePackageCache.ContainsKey($fullyQualifiedName)))
+                {
+                    $script:onlinePackageCache[$fullyQualifiedName] = $null
+                }
             }
 
             # nothing matched!
-            if ($packagesToBeReturned.Count -eq 0)
+            if ($packagesToBeReturned.Count -gt 0)
             {
-                return
+                # Before we get more details, we will clump together base and language pack if they have same name and version
+                $packagesToBeReturned = Filter-Packages $packagesToBeReturned
             }
-
-            # Before we get more details, we will clump together base and language pack if they have same name and version
-            $packagesToBeReturned = Filter-Packages $packagesToBeReturned
 
             # Only update the list of packages that the user gives
             foreach ($package in $packagesToBeReturned)
@@ -2351,7 +2526,7 @@ function Get-InstalledPackage
                 $count += 1;
 
                 # store the information in cache if it's not there or if user uses force
-                if (-not $script:onlinePackageCache.ContainsKey($package) -or $force)
+                if ((-not $script:onlinePackageCache.ContainsKey($package)) -or ($null -eq $script:onlinePackageCache[$package]) -or $force)
                 {
                     Write-Debug "Getting information for package $package and storing it in cache"
                     # store the information in cache
@@ -2387,6 +2562,142 @@ function Get-InstalledPackage
         finally 
         {
             Write-Progress -Completed -Id $id -Activity "Completed"
+        }
+    }
+}
+
+function Uninstall-Package
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $fastPackageReference
+    )
+
+
+    Write-Verbose $fastPackageReference
+
+    # path to the offline nano image
+    $imagePath = $null
+
+    $options = $request.Options
+
+    $NoRestart = $false
+
+    $force = $false
+
+    $languageChosen = $null
+
+    # check out what options the users give us
+    if($options)
+    {
+        foreach( $o in $options.Keys )
+        {
+            Write-Debug ("OPTION dictionary: {0} => {1}" -f ($o, $options[$o]) )
+        }
+
+        if($options.ContainsKey('Force'))
+        {
+            $force = $options['Force']
+        }
+
+        if ($options.ContainsKey("FromVhd"))
+        {
+            $imagePath = $options['FromVhd']
+        }
+
+        if ($options.ContainsKey("Culture"))
+        {
+            $languageChosen = $options['Culture']
+        }
+
+        if ($options.ContainsKey("NoRestart"))
+        {
+            $NoRestart = $options['NoRestart']
+        }
+    }
+
+    # if image path is supplied and it points to non existing file, returns
+    if (-not [string]::IsNullOrWhiteSpace($imagePath) -and (-not ([System.IO.File]::Exists($ImagePath))))
+    {
+       ThrowError -CallerPSCmdlet $PSCmdlet `
+            -ExceptionName System.ArgumentException `
+            -ExceptionMessage "$ImagePath does not exist" `
+            -ExceptionObject $imagePath `
+            -ErrorId "InvalidImagePath" `
+            -ErrorCategory InvalidData
+
+        return
+    }
+
+    [string[]] $splitterArray = @("$separator")
+    
+    [string[]] $resultArray = $fastPackageReference.Split($splitterArray, [System.StringSplitOptions]::None)
+
+    $packageId = $resultArray[4]
+
+    if ($null -eq $languageChosen) {
+        Write-Verbose "No language chosen, removing base"
+
+        $packageFragments = $packageId.Split("~")
+
+        $packageFragments[3] = ""
+
+        $packageId = [string]::Join("~", $packageFragments)
+
+        Write-Verbose "New package id is $packageId"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($imagePath)) {
+        # removing from vhd
+        $mountDrive = New-MountDrive
+
+        Write-Verbose "Mounting $imagePath to $mountDrive"
+
+        $null = Mount-WindowsImage -ImagePath $imagePath -Index 1 -Path $mountDrive
+        
+        $success = $false
+
+        try {
+            Write-Verbose "Removing $packageId from $mountDrive"
+
+            Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
+
+            # time to update the cache since we remove this package
+            $fileKey = Get-FileKey -filePath $imagePath
+
+            if ($script:imagePathCache.ContainsKey($fileKey)) {
+                $packageDictionary = $script:imagePathCache[$fileKey]
+
+                if ($null -ne $packageDictionary -and $packageDictionary.ContainsKey($packageId)) {
+                    $packageDictionary.Remove($packageId)
+                }
+            }
+
+            $success = $true
+        }
+        catch {
+            $success = $false
+        }
+        finally {
+            # unmount
+            if ($null -ne $mountDrive)
+            {
+                Write-Verbose "Unmounting mountdrive $mountDrive"
+                Remove-MountDrive $mountDrive -discard (-not $success)
+            }
+        }
+    }
+    else {
+        # removing online
+        $messages = Remove-WindowsPackage -PackageName $packageId -Online -NoRestart -WarningAction Ignore
+
+        if ($messages.RestartNeeded -and (-not $NoRestart))
+        {
+            Write-Warning "Restart is needed to complete installation"
         }
     }
 }
@@ -2465,6 +2776,19 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
 
     $Name = [System.IO.Path]::GetFileNameWithoutExtension($package.Name)
 
+    $deps = (new-Object -TypeName  System.Collections.ArrayList)
+
+    foreach( $dep in $package.Dependencies ) 
+    {
+        # Add each dependency and say it's from this provider.
+        $newDep = New-Dependency -ProviderName $script:providerName `
+                                 -PackageName $dep.Name `
+                                 -Version $dep.Version
+        $deps.Add( $newDep )
+    }
+
+    $details["Sku"] = $package.Sku
+
     $params = @{FastPackageReference = $fastPackageReference;
                 Name = $Name;
                 Version = $package.version.ToString();
@@ -2472,7 +2796,8 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
                 Source = $package.Source;
                 Summary = $package.Description;
                 Details = $details;
-                Culture = $Culture
+                Culture = $Culture;
+                Dependencies = $deps;
                 }
 
     try
@@ -2487,6 +2812,7 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
     }
 }
 
+# this function is used by get-installedpackage
 function New-SoftwareIdentityPackage
 {
     [CmdletBinding()]
@@ -2575,7 +2901,7 @@ function New-SoftwareIdentityPackage
         $version = $packageNameFractions[4]
     }
 
-    $fastPackageReference = $name + $separator + $Culture + $separator + $version + $separator + $InstallLocation
+    $fastPackageReference = $name + $separator + $version + $separator + $InstallLocation + $separator + $Culture + $separator + $package.PackageName
 
     $params = @{FastPackageReference = $fastPackageReference;
                 Name = $name;
@@ -2583,7 +2909,8 @@ function New-SoftwareIdentityPackage
                 versionScheme  = "MultiPartNumeric";
                 Source = $src;
                 Details = $details;
-                Culture = $Culture
+                Culture = $Culture;
+                TagId = $Package.PackageName;
                 }
 
     try
@@ -2594,6 +2921,7 @@ function New-SoftwareIdentityPackage
     {
         # throw error because older version of packagemanagement does not have culture key
         $params.Remove("Culture")
+        $params.Remove("TagId")
         New-SoftwareIdentity @params
     }
 }
@@ -3103,149 +3431,3 @@ function ThrowError
 }
 
 #endregion OneGet Helpers
-
-# SIG # Begin signature block
-# MIIarwYJKoZIhvcNAQcCoIIaoDCCGpwCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJ409ylcXgskZrYDe/L1iiy6V
-# 09+gghWCMIIEwzCCA6ugAwIBAgITMwAAAJb6gDHvN2RGRQAAAAAAljANBgkqhkiG
-# 9w0BAQUFADB3MQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4G
-# A1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSEw
-# HwYDVQQDExhNaWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EwHhcNMTUxMDA3MTgxNDI0
-# WhcNMTcwMTA3MTgxNDI0WjCBszELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hp
-# bmd0b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jw
-# b3JhdGlvbjENMAsGA1UECxMETU9QUjEnMCUGA1UECxMebkNpcGhlciBEU0UgRVNO
-# OkJCRUMtMzBDQS0yREJFMSUwIwYDVQQDExxNaWNyb3NvZnQgVGltZS1TdGFtcCBT
-# ZXJ2aWNlMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm1pYSwjyVGa6
-# tIZe8M6+zXQQ33WKYIyKYcI3oiZcZgVcxdizVjv3hKmjqmRTC5REuLtaSYbdeCuG
-# bdMP2+NGWrqeWKLQIxb/Gs/BkEzrr+ewnZ+UQ7xON8jkhPhMSdT5ZiVVNdhVgo+y
-# 3hvrk0tk4iDpr5Xwqk5U2W5yZkXras/mIIfO54mjfS31tKQbIsxxubm8Np9ioBit
-# boqgiC1iwSxGh7/LGPp1NJVacuQc1JMuzkhRNXxwALbWbyrsUV8Aztz5eaUASLoF
-# jkK43ety0X/rV9Qlws43Q2LjKhztpEaxloEr0gioCAEmkJssDjd1qqCZ6X/bht1e
-# ggluXnz2tQIDAQABo4IBCTCCAQUwHQYDVR0OBBYEFMfD/XvxW9NCtvwEw94qmvuS
-# ht7IMB8GA1UdIwQYMBaAFCM0+NlSRnAK7UD7dvuzK7DDNbMPMFQGA1UdHwRNMEsw
-# SaBHoEWGQ2h0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2kvY3JsL3Byb2R1Y3Rz
-# L01pY3Jvc29mdFRpbWVTdGFtcFBDQS5jcmwwWAYIKwYBBQUHAQEETDBKMEgGCCsG
-# AQUFBzAChjxodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20vcGtpL2NlcnRzL01pY3Jv
-# c29mdFRpbWVTdGFtcFBDQS5jcnQwEwYDVR0lBAwwCgYIKwYBBQUHAwgwDQYJKoZI
-# hvcNAQEFBQADggEBADQzONHGQV0X/NPCsvaZQv26Syn1rUGW85E9wUCgtf0iWG55
-# ntOcHryYkkVIkjB/vd9ixfzGlW2Bz08YdPHJc5he9ZNkfwhjHqW9r6ii06pa4kzE
-# PbgYlLwVRRvxzJwLZpSe56UceM8FmEnsRUSVKzabhLjmiIAFpnNlGgYd6g0eDvxT
-# FM9SOJozV4Mjyb7e+Gv//ZxUeZcTK2S/Nam+B6m/mlRVajUYotCDwziVxrm1irMt
-# a15M55pT3aawt+QrwXaRUMRSRmIgXTHgFWdM3AksQGA0a77rRKGYldX0iPyH2XOw
-# rTHQww9kEcX1r+2R+9QjmsljYc3ZPGnA+2YCADEwggTsMIID1KADAgECAhMzAAAB
-# Cix5rtd5e6asAAEAAAEKMA0GCSqGSIb3DQEBBQUAMHkxCzAJBgNVBAYTAlVTMRMw
-# EQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVN
-# aWNyb3NvZnQgQ29ycG9yYXRpb24xIzAhBgNVBAMTGk1pY3Jvc29mdCBDb2RlIFNp
-# Z25pbmcgUENBMB4XDTE1MDYwNDE3NDI0NVoXDTE2MDkwNDE3NDI0NVowgYMxCzAJ
-# BgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25k
-# MR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xDTALBgNVBAsTBE1PUFIx
-# HjAcBgNVBAMTFU1pY3Jvc29mdCBDb3Jwb3JhdGlvbjCCASIwDQYJKoZIhvcNAQEB
-# BQADggEPADCCAQoCggEBAJL8bza74QO5KNZG0aJhuqVG+2MWPi75R9LH7O3HmbEm
-# UXW92swPBhQRpGwZnsBfTVSJ5E1Q2I3NoWGldxOaHKftDXT3p1Z56Cj3U9KxemPg
-# 9ZSXt+zZR/hsPfMliLO8CsUEp458hUh2HGFGqhnEemKLwcI1qvtYb8VjC5NJMIEb
-# e99/fE+0R21feByvtveWE1LvudFNOeVz3khOPBSqlw05zItR4VzRO/COZ+owYKlN
-# Wp1DvdsjusAP10sQnZxN8FGihKrknKc91qPvChhIqPqxTqWYDku/8BTzAMiwSNZb
-# /jjXiREtBbpDAk8iAJYlrX01boRoqyAYOCj+HKIQsaUCAwEAAaOCAWAwggFcMBMG
-# A1UdJQQMMAoGCCsGAQUFBwMDMB0GA1UdDgQWBBSJ/gox6ibN5m3HkZG5lIyiGGE3
-# NDBRBgNVHREESjBIpEYwRDENMAsGA1UECxMETU9QUjEzMDEGA1UEBRMqMzE1OTUr
-# MDQwNzkzNTAtMTZmYS00YzYwLWI2YmYtOWQyYjFjZDA1OTg0MB8GA1UdIwQYMBaA
-# FMsR6MrStBZYAck3LjMWFrlMmgofMFYGA1UdHwRPME0wS6BJoEeGRWh0dHA6Ly9j
-# cmwubWljcm9zb2Z0LmNvbS9wa2kvY3JsL3Byb2R1Y3RzL01pY0NvZFNpZ1BDQV8w
-# OC0zMS0yMDEwLmNybDBaBggrBgEFBQcBAQROMEwwSgYIKwYBBQUHMAKGPmh0dHA6
-# Ly93d3cubWljcm9zb2Z0LmNvbS9wa2kvY2VydHMvTWljQ29kU2lnUENBXzA4LTMx
-# LTIwMTAuY3J0MA0GCSqGSIb3DQEBBQUAA4IBAQCmqFOR3zsB/mFdBlrrZvAM2PfZ
-# hNMAUQ4Q0aTRFyjnjDM4K9hDxgOLdeszkvSp4mf9AtulHU5DRV0bSePgTxbwfo/w
-# iBHKgq2k+6apX/WXYMh7xL98m2ntH4LB8c2OeEti9dcNHNdTEtaWUu81vRmOoECT
-# oQqlLRacwkZ0COvb9NilSTZUEhFVA7N7FvtH/vto/MBFXOI/Enkzou+Cxd5AGQfu
-# FcUKm1kFQanQl56BngNb/ErjGi4FrFBHL4z6edgeIPgF+ylrGBT6cgS3C6eaZOwR
-# XU9FSY0pGi370LYJU180lOAWxLnqczXoV+/h6xbDGMcGszvPYYTitkSJlKOGMIIF
-# vDCCA6SgAwIBAgIKYTMmGgAAAAAAMTANBgkqhkiG9w0BAQUFADBfMRMwEQYKCZIm
-# iZPyLGQBGRYDY29tMRkwFwYKCZImiZPyLGQBGRYJbWljcm9zb2Z0MS0wKwYDVQQD
-# EyRNaWNyb3NvZnQgUm9vdCBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkwHhcNMTAwODMx
-# MjIxOTMyWhcNMjAwODMxMjIyOTMyWjB5MQswCQYDVQQGEwJVUzETMBEGA1UECBMK
-# V2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0
-# IENvcnBvcmF0aW9uMSMwIQYDVQQDExpNaWNyb3NvZnQgQ29kZSBTaWduaW5nIFBD
-# QTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJyWVwZMGS/HZpgICBC
-# mXZTbD4b1m/My/Hqa/6XFhDg3zp0gxq3L6Ay7P/ewkJOI9VyANs1VwqJyq4gSfTw
-# aKxNS42lvXlLcZtHB9r9Jd+ddYjPqnNEf9eB2/O98jakyVxF3K+tPeAoaJcap6Vy
-# c1bxF5Tk/TWUcqDWdl8ed0WDhTgW0HNbBbpnUo2lsmkv2hkL/pJ0KeJ2L1TdFDBZ
-# +NKNYv3LyV9GMVC5JxPkQDDPcikQKCLHN049oDI9kM2hOAaFXE5WgigqBTK3S9dP
-# Y+fSLWLxRT3nrAgA9kahntFbjCZT6HqqSvJGzzc8OJ60d1ylF56NyxGPVjzBrAlf
-# A9MCAwEAAaOCAV4wggFaMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFMsR6MrS
-# tBZYAck3LjMWFrlMmgofMAsGA1UdDwQEAwIBhjASBgkrBgEEAYI3FQEEBQIDAQAB
-# MCMGCSsGAQQBgjcVAgQWBBT90TFO0yaKleGYYDuoMW+mPLzYLTAZBgkrBgEEAYI3
-# FAIEDB4KAFMAdQBiAEMAQTAfBgNVHSMEGDAWgBQOrIJgQFYnl+UlE/wq4QpTlVnk
-# pDBQBgNVHR8ESTBHMEWgQ6BBhj9odHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtp
-# L2NybC9wcm9kdWN0cy9taWNyb3NvZnRyb290Y2VydC5jcmwwVAYIKwYBBQUHAQEE
-# SDBGMEQGCCsGAQUFBzAChjhodHRwOi8vd3d3Lm1pY3Jvc29mdC5jb20vcGtpL2Nl
-# cnRzL01pY3Jvc29mdFJvb3RDZXJ0LmNydDANBgkqhkiG9w0BAQUFAAOCAgEAWTk+
-# fyZGr+tvQLEytWrrDi9uqEn361917Uw7LddDrQv+y+ktMaMjzHxQmIAhXaw9L0y6
-# oqhWnONwu7i0+Hm1SXL3PupBf8rhDBdpy6WcIC36C1DEVs0t40rSvHDnqA2iA6VW
-# 4LiKS1fylUKc8fPv7uOGHzQ8uFaa8FMjhSqkghyT4pQHHfLiTviMocroE6WRTsgb
-# 0o9ylSpxbZsa+BzwU9ZnzCL/XB3Nooy9J7J5Y1ZEolHN+emjWFbdmwJFRC9f9Nqu
-# 1IIybvyklRPk62nnqaIsvsgrEA5ljpnb9aL6EiYJZTiU8XofSrvR4Vbo0HiWGFzJ
-# NRZf3ZMdSY4tvq00RBzuEBUaAF3dNVshzpjHCe6FDoxPbQ4TTj18KUicctHzbMrB
-# 7HCjV5JXfZSNoBtIA1r3z6NnCnSlNu0tLxfI5nI3EvRvsTxngvlSso0zFmUeDord
-# EN5k9G/ORtTTF+l5xAS00/ss3x+KnqwK+xMnQK3k+eGpf0a7B2BHZWBATrBC7E7t
-# s3Z52Ao0CW0cgDEf4g5U3eWh++VHEK1kmP9QFi58vwUheuKVQSdpw5OPlcmN2Jsh
-# rg1cnPCiroZogwxqLbt2awAdlq3yFnv2FoMkuYjPaqhHMS+a3ONxPdcAfmJH0c6I
-# ybgY+g5yjcGjPa8CQGr/aZuW4hCoELQ3UAjWwz0wggYHMIID76ADAgECAgphFmg0
-# AAAAAAAcMA0GCSqGSIb3DQEBBQUAMF8xEzARBgoJkiaJk/IsZAEZFgNjb20xGTAX
-# BgoJkiaJk/IsZAEZFgltaWNyb3NvZnQxLTArBgNVBAMTJE1pY3Jvc29mdCBSb290
-# IENlcnRpZmljYXRlIEF1dGhvcml0eTAeFw0wNzA0MDMxMjUzMDlaFw0yMTA0MDMx
-# MzAzMDlaMHcxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYD
-# VQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xITAf
-# BgNVBAMTGE1pY3Jvc29mdCBUaW1lLVN0YW1wIFBDQTCCASIwDQYJKoZIhvcNAQEB
-# BQADggEPADCCAQoCggEBAJ+hbLHf20iSKnxrLhnhveLjxZlRI1Ctzt0YTiQP7tGn
-# 0UytdDAgEesH1VSVFUmUG0KSrphcMCbaAGvoe73siQcP9w4EmPCJzB/LMySHnfL0
-# Zxws/HvniB3q506jocEjU8qN+kXPCdBer9CwQgSi+aZsk2fXKNxGU7CG0OUoRi4n
-# rIZPVVIM5AMs+2qQkDBuh/NZMJ36ftaXs+ghl3740hPzCLdTbVK0RZCfSABKR2YR
-# JylmqJfk0waBSqL5hKcRRxQJgp+E7VV4/gGaHVAIhQAQMEbtt94jRrvELVSfrx54
-# QTF3zJvfO4OToWECtR0Nsfz3m7IBziJLVP/5BcPCIAsCAwEAAaOCAaswggGnMA8G
-# A1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFCM0+NlSRnAK7UD7dvuzK7DDNbMPMAsG
-# A1UdDwQEAwIBhjAQBgkrBgEEAYI3FQEEAwIBADCBmAYDVR0jBIGQMIGNgBQOrIJg
-# QFYnl+UlE/wq4QpTlVnkpKFjpGEwXzETMBEGCgmSJomT8ixkARkWA2NvbTEZMBcG
-# CgmSJomT8ixkARkWCW1pY3Jvc29mdDEtMCsGA1UEAxMkTWljcm9zb2Z0IFJvb3Qg
-# Q2VydGlmaWNhdGUgQXV0aG9yaXR5ghB5rRahSqClrUxzWPQHEy5lMFAGA1UdHwRJ
-# MEcwRaBDoEGGP2h0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2kvY3JsL3Byb2R1
-# Y3RzL21pY3Jvc29mdHJvb3RjZXJ0LmNybDBUBggrBgEFBQcBAQRIMEYwRAYIKwYB
-# BQUHMAKGOGh0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9wa2kvY2VydHMvTWljcm9z
-# b2Z0Um9vdENlcnQuY3J0MBMGA1UdJQQMMAoGCCsGAQUFBwMIMA0GCSqGSIb3DQEB
-# BQUAA4ICAQAQl4rDXANENt3ptK132855UU0BsS50cVttDBOrzr57j7gu1BKijG1i
-# uFcCy04gE1CZ3XpA4le7r1iaHOEdAYasu3jyi9DsOwHu4r6PCgXIjUji8FMV3U+r
-# kuTnjWrVgMHmlPIGL4UD6ZEqJCJw+/b85HiZLg33B+JwvBhOnY5rCnKVuKE5nGct
-# xVEO6mJcPxaYiyA/4gcaMvnMMUp2MT0rcgvI6nA9/4UKE9/CCmGO8Ne4F+tOi3/F
-# NSteo7/rvH0LQnvUU3Ih7jDKu3hlXFsBFwoUDtLaFJj1PLlmWLMtL+f5hYbMUVbo
-# nXCUbKw5TNT2eb+qGHpiKe+imyk0BncaYsk9Hm0fgvALxyy7z0Oz5fnsfbXjpKh0
-# NbhOxXEjEiZ2CzxSjHFaRkMUvLOzsE1nyJ9C/4B5IYCeFTBm6EISXhrIniIh0EPp
-# K+m79EjMLNTYMoBMJipIJF9a6lbvpt6Znco6b72BJ3QGEe52Ib+bgsEnVLaxaj2J
-# oXZhtG6hE6a/qkfwEm/9ijJssv7fUciMI8lmvZ0dhxJkAj0tr1mPuOQh5bWwymO0
-# eFQF1EEuUKyUsKV4q7OglnUa2ZKHE3UiLzKoCG6gW4wlv6DvhMoh1useT8ma7kng
-# 9wFlb4kLfchpyOZu6qeXzjEp/w7FW1zYTRuh2Povnj8uVRZryROj/TGCBJcwggST
-# AgEBMIGQMHkxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYD
-# VQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xIzAh
-# BgNVBAMTGk1pY3Jvc29mdCBDb2RlIFNpZ25pbmcgUENBAhMzAAABCix5rtd5e6as
-# AAEAAAEKMAkGBSsOAwIaBQCggbAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQw
-# HAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHHl
-# WmwWVWC77+MZbWCHoeSV6zbaMFAGCisGAQQBgjcCAQwxQjBAoBaAFABQAG8AdwBl
-# AHIAUwBoAGUAbABsoSaAJGh0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9Qb3dlclNo
-# ZWxsIDANBgkqhkiG9w0BAQEFAASCAQAu7lr/wtQ2YMxp6s63su3OSS/+e1QplQUN
-# 3nXfWoqYW/C6FHzqHQFwR/dG+3rXtOlD5xNjvoyoXQfGIud63vtJiHJs/nblcWsL
-# NWANUlSXIqTq6OYS4LISRw78e8TZd85XJ65KHhMR7slYYXkeYtC02M88nX+WVA1i
-# KQJPyF/onCm9qL7B6eaR8hUVwjDUQiCA2g1Z1gTxtNcKVNW4+8S5mgZ+NF2UwWnJ
-# fy7/jlygM8cPnn5cyAqsTbbp2/8nVTM/GbdYuayfzb8BtbwimriiKVT0TH/qTxiM
-# h3CKOXr1K7jjymaBcXBk1KO88cENINUNIyt0y4YIdq0bPj2OYifzoYICKDCCAiQG
-# CSqGSIb3DQEJBjGCAhUwggIRAgEBMIGOMHcxCzAJBgNVBAYTAlVTMRMwEQYDVQQI
-# EwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3Nv
-# ZnQgQ29ycG9yYXRpb24xITAfBgNVBAMTGE1pY3Jvc29mdCBUaW1lLVN0YW1wIFBD
-# QQITMwAAAJb6gDHvN2RGRQAAAAAAljAJBgUrDgMCGgUAoF0wGAYJKoZIhvcNAQkD
-# MQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMTYwNDIxMjI1MTM5WjAjBgkq
-# hkiG9w0BCQQxFgQUCN8b9EXu29+Rm3QO+EN5ddLIoA0wDQYJKoZIhvcNAQEFBQAE
-# ggEAKVQuIWGvXCx9fUSMm+cdO0a7R97P+kqfC72FS5m8PW6phrKfLTHAUBSQBaJx
-# z34zOTjBsUUZRqdIVgh/VK50GFLupBg7uvpX5QwP6KEj8Th2DIoI3O6CKxfSpZU6
-# jbWFLa0WmEFBnzWvOK2CZwbHnGFmudy07oYGnln+45wx0hX6YcybwgLqermR+ULW
-# /wzkepHTs+WZxfh7ZyWi2EmYzeyABj9TuiG5HI4VU9tz7xqbcwJiGSLI/fTIWz4B
-# 6DMya2mUzbGPn53ouNkS3t37s8qRoaBHc4SkMCLwhbi8y9I6oZx70jSjRbKu3FnC
-# +eY+hq8gj8dEwVWLc+yV0tTZKw==
-# SIG # End signature block
