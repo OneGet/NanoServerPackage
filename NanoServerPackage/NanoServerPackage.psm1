@@ -15,7 +15,7 @@ $script:downloadedCabLocation = "$script:WindowsPackage\DownloadedCabs"
 $script:file_modules = "$script:WindowsPackage\sources.txt"
 $script:windowsPackageSources = $null
 $script:defaultPackageName = "NanoServerPackageSource"
-$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=708783&clcid=0x409"
+$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=730617&clcid=0x409"
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
 $script:availablePackages = @()
@@ -1515,7 +1515,7 @@ function DepthFirstVisit(
             continue
         }
 
-        $dependencyPackage = Find-NanoServerPackage -Name $dependency.Name -RequiredVersion $dependency.Version -Culture $culture
+        $dependencyPackage = Find -Name $dependency.Name -RequiredVersion $dependency.Version -Culture $culture
 
         if (-not (DepthFirstVisit -package $dependencyPackage -permanentlyMarked $permanentlyMarked `
                 -temporarilyMarked $temporarilyMarked -culture $culture `
@@ -2692,10 +2692,12 @@ function Uninstall-Package
         }
     }
     else {
+        Write-Verbose "Uninstalling $packageId online"
+
         # removing online
         $messages = Remove-WindowsPackage -PackageName $packageId -Online -NoRestart -WarningAction Ignore
 
-        if ($messages.RestartNeeded -and (-not $NoRestart))
+        if ($messages -ne $null -and $messages.RestartNeeded -and (-not $NoRestart))
         {
             Write-Warning "Restart is needed to complete installation"
         }

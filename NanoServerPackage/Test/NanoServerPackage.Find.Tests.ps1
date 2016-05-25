@@ -1,6 +1,3 @@
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sut = (Split-Path -Leaf $MyInvocation.MyCommand.Path).Replace(".Find.Tests.ps1", ".psm1")
-. "$here\..\$sut"
 # only have 1 version for now :(
 $minVersion = "10.0.14300.1000"
 $maxVersion = "10.0.14300.1000"
@@ -44,7 +41,7 @@ Describe “Find-NanoServerPackage Stand-Alone" {
 
     It "Find NanoServerPackage Bad Name" {
         $results = @()
-        $results += (Find-NanoServerPackage -Name containers)
+        $results += (Find-NanoServerPackage -Name containers -ErrorAction SilentlyContinue)
         $results.count | should be 0
     }
     
@@ -257,6 +254,12 @@ Describe “Find-NanoServerPackage Stand-Alone" {
             $result.name | should match $name
             $result.Version | should be $requiredVersion
         }
+    }
+
+    It "Find NanoServerPackage with Dependencies" {
+        $scvmmCompute = Find-NanoServerPackage *scvmm-compute* -RequiredVersion 10.0.14300.1000
+        $scvmmCompute.Dependencies[0] | should match "nanoserverpackage:Microsoft-NanoServer-SCVMM-Package/10.0.14300.1000"
+        $scvmmCompute.Dependencies[1] | should match "nanoserverpackage:Microsoft-NanoServer-Compute-Package/10.0.14300.1000"
     }
 }
 
@@ -509,5 +512,14 @@ Describe "NanoServerPackage OneGet" {
             $result.name | should match $name
             $result.Version | should be $requiredVersion
         }
+    }
+
+    It "Find NanoServerPackage with Dependencies" {
+        $scvmmComputePackages = (Find-Package *scvmm-compute* -RequiredVersion 10.0.14300.1000 -ProviderName NanoServerPackage -IncludeDependencies)
+        $scvmmComputePackages.Count | should be 3
+
+        $scvmmComputePackages.Name -contains "microsoft-nanoserver-compute-package" | should be $true
+        $scvmmComputePackages.Name -contains "microsoft-nanoserver-scvmm-package" | should be $true
+        $scvmmComputePackages.Name -contains "microsoft-nanoserver-scvmm-compute-package" | should be $true
     }
 }

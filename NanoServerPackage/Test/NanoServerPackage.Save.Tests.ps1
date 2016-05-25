@@ -154,6 +154,29 @@ Describe “Save-WindowsPackage Stand-Alone" {
 
         Remove-Item $pathToSave\*.cab
     }
+
+    It "Save-NanoServerPackage With Dependencies" {
+        try {
+            $name = "Microsoft-NanoServer-SCVMM-Compute-Package"
+            $culture = $cultures | Get-Random
+            $version = "10.0.14300.1000"
+
+            $results = @()
+            $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -RequiredVersion $requiredVersion -Force)
+
+            $results.count | should be 3
+            $results.name -contains $name | should be $true
+            $results.name -contains "Microsoft-NanoServer-Compute-Package" | should be $true
+            $results.name -contains "Microsoft-NanoServer-SCVMM-Package" | should be $true
+            $results[0].culture | should match $culture
+            $results[1].culture | should match $culture
+            $results[2].culture | should match $culture
+        }
+        finally {
+            Remove-Item $pathToSave\*.cab
+        }
+    }
+
 }
 
 Describe “Save-NanoServerPackage One-Get" {
@@ -304,5 +327,27 @@ Describe “Save-NanoServerPackage One-Get" {
         }
 
         Remove-Item $pathToSave\*.cab
+    }
+
+    It "Save-NanoServerPackage With Dependencies" {
+        try {
+            $name = "Microsoft-NanoServer-SCVMM-Compute-Package"
+            $culture = $cultures | Get-Random
+            $version = "10.0.14300.1000"
+
+            $results = @()
+            $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -RequiredVersion $requiredVersion -Force)
+
+            $results.count | should be 3
+            $results.name -contains $name | should be $true
+            $results.name -contains "Microsoft-NanoServer-Compute-Package" | should be $true
+            $results.name -contains "Microsoft-NanoServer-SCVMM-Package" | should be $true
+            $results[0].culture | should match $culture
+            $results[1].culture | should match $culture
+            $results[2].culture | should match $culture
+        }
+        finally {
+            Remove-Item $pathToSave\*.cab
+        }
     }
 }
