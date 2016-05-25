@@ -2372,7 +2372,7 @@ function Get-InstalledPackage
         }
 
         Write-Progress -Activity "Mounting $imagePath to $mountDrive" -PercentComplete 0 -Id $id
-        $
+
         Mount-WindowsImage -ImagePath $imagePath -Index 1 -Path $mountDrive
 
         Write-Verbose "Done Mounting"
