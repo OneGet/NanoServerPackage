@@ -15,7 +15,7 @@ $script:downloadedCabLocation = "$script:WindowsPackage\DownloadedCabs"
 $script:file_modules = "$script:WindowsPackage\sources.txt"
 $script:windowsPackageSources = $null
 $script:defaultPackageName = "NanoServerPackageSource"
-$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=730617&clcid=0x409"
+$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=708783&clcid=0x409"
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
 $script:availablePackages = @()
@@ -1161,13 +1161,7 @@ function Install-PackageHelper
 
         foreach ($savedPackage in $savedPackages)
         {
-            # proceed with installation
-            $basePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture "" -version $savedPackage.Version))
-
-            if (Test-Path $basePackageFile) {
-                $savedCabFilesToInstall += $basePackageFile
-            }
-
+            # proceed with installation, we only need to install the language package, dism will handle installation of the base too
             $languagePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture $Culture -version $savedPackage.Version))
 
             if (Test-Path $languagePackageFile) {
@@ -2639,16 +2633,18 @@ function Uninstall-Package
 
     $packageId = $resultArray[4]
 
+    $basePackage = $null
+
     if ($null -eq $languageChosen) {
-        Write-Verbose "No language chosen, removing base"
+        Write-Verbose "No language chosen, removing base too"
 
         $packageFragments = $packageId.Split("~")
 
         $packageFragments[3] = ""
 
-        $packageId = [string]::Join("~", $packageFragments)
+        $basePackage = [string]::Join("~", $packageFragments)
 
-        Write-Verbose "New package id is $packageId"
+        Write-Debug "New package id is $packageId and the base package is $basePackage"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($imagePath)) {
@@ -2664,16 +2660,44 @@ function Uninstall-Package
         try {
             Write-Verbose "Removing $packageId from $mountDrive"
 
-            Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
-
             # time to update the cache since we remove this package
             $fileKey = Get-FileKey -filePath $imagePath
 
             if ($script:imagePathCache.ContainsKey($fileKey)) {
                 $packageDictionary = $script:imagePathCache[$fileKey]
 
-                if ($null -ne $packageDictionary -and $packageDictionary.ContainsKey($packageId)) {
-                    $packageDictionary.Remove($packageId)
+                if ($null -ne $packageDictionary) {
+                    if ($packageDictionary.ContainsKey($packageId)) {
+                        Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
+                        $packageDictionary.Remove($packageId)
+                    }
+                }
+                else {
+                    # nothing in cache
+                    Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
+                }
+            }            
+
+
+            if (-not ([string]::IsNullOrWhiteSpace($basePackage)))
+            {
+                Remove-WindowsPackage -PackageName $basePackage -Path $mountDrive | Out-Null
+            }
+
+            if ($script:imagePathCache.ContainsKey($fileKey)) {
+                $packageDictionary = $script:imagePathCache[$fileKey]
+
+                if ($null -ne $packageDictionary)
+                {
+                    if ($packageDictionary.ContainsKey($packageId))
+                    {
+                        $packageDictionary.Remove($packageId)
+                    }
+
+                    if ((-not [string]::IsNullOrWhiteSpace($basePackage)) -and $packageDictionary.ContainsKey($basePackage))
+                    {
+                        $packageDictionary.Remove($basePackage)
+                    }
                 }
             }
 
@@ -2694,10 +2718,26 @@ function Uninstall-Package
     else {
         Write-Verbose "Uninstalling $packageId online"
 
-        # removing online
-        $messages = Remove-WindowsPackage -PackageName $packageId -Online -NoRestart -WarningAction Ignore
+        $messages = $null
 
-        if ($messages -ne $null -and $messages.RestartNeeded -and (-not $NoRestart))
+        if ($script:onlinePackageCache.ContainsKey($packageId)) {
+            # removing online
+            $messages = Remove-WindowsPackage -PackageName $packageId -Online -NoRestart -WarningAction Ignore
+            $script:onlinePackageCache.Remove($packageId)
+        }
+
+        $restart = $messages -ne $null -and $messages.RestartNeeded
+
+        if (-not [string]::IsNullOrWhiteSpace($basePackage))
+        {
+            if ($script:onlinePackageCache.ContainsKey($basePackage)) {
+                $messages = Remove-WindowsPackage -PackageName $basePackage -Online -NoRestart -WarningAction Ignore       
+                $script:onlinePackageCache.Remove($basePackage)
+                $restart = $restart -or ($messages -ne $null -and $messages.RestartNeeded)
+            }
+        }
+
+        if ($restart -and (-not $NoRestart))
         {
             Write-Warning "Restart is needed to complete installation"
         }
