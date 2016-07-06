@@ -18,6 +18,7 @@ $script:defaultPackageName = "NanoServerPackageSource"
 $script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=708783&clcid=0x409"
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
+$script:systemSKU = -1
 $script:availablePackages = @()
 $separator = "|#|"
 
@@ -461,25 +462,105 @@ function Install-NanoServerPackage
 
         if (-not [string]::IsNullOrWhiteSpace($ToVhd))
         {
-            $ToVhd = Resolve-PathHelper $ToVhd -callerPSCmdlet $PSCmdlet
-            
-            if (-not ([System.IO.File]::Exists($ToVhd)))
+            if($PSCmdlet.ShouldProcess($ToVhd, "Mount-WindowsImage"))
             {
-                $exception = New-Object System.ArgumentException "$ToVhd does not exist"
-                $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidArgument
-                $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "InvalidVhdPath", $errorCategory, $ToVhd
+                $ToVhd = Resolve-PathHelper $ToVhd -callerPSCmdlet $PSCmdlet
+            
+                if (-not ([System.IO.File]::Exists($ToVhd)))
+                {
+                    $exception = New-Object System.ArgumentException "$ToVhd does not exist"
+                    $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidArgument
+                    $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "InvalidVhdPath", $errorCategory, $ToVhd
 
-                $PSCmdlet.ThrowTerminatingError($errorRecord)
+                    $PSCmdlet.ThrowTerminatingError($errorRecord)
+                }
+
+                # mount image
+                $mountDrive = New-MountDrive
+
+                Write-Verbose "Mounting $ToVhd to $mountDrive"
+
+                Write-Progress -Activity "Mounting $ToVhd to $mountDrive" -PercentComplete 0
+
+                $null = Mount-WindowsImage -ImagePath $ToVhd -Index 1 -Path $mountDrive
+
+                $mountedVHDEdition = $null
+
+                foreach ($packageToBeInstalled in $packagesToBeInstalled)
+                {
+                    # if this package can't be install on standard, should do a check
+                    if (-not $packageToBeInstalled.Sku.Contains("144"))
+                    {
+                        # initialize the regkey
+                        if ($mountedVHDEdition -eq $null)
+                        {
+                            $regKey = $null
+
+                            try
+                            {
+                                reg load HKLM\NANOSERVERPACKAGEVHDSYS "$mountDrive\Windows\System32\config\SOFTWARE" | Out-Null
+                                $regKey = dir 'HKLM:\NANOSERVERPACKAGEVHDSYS\Microsoft\Windows NT'
+                                $mountedVHDEdition = $regKey.GetValue("EditionID")
+                            }
+                            catch
+                            {
+                                # ERROR
+                                $mountedVHDEdition = "ERROR"
+                            }
+                            finally
+                            {
+                                try
+                                {
+                                    if ($regKey -ne $null)
+                                    {
+                                        $regKey.Handle.Close()
+                                        [gc]::Collect()
+                                        reg unload HKLM\NANOSERVERPACKAGEVHDSYS | Out-Null
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        if ($mountedVHDEdition -eq "ServerStandardNano")
+                        {
+                            # unmount the drive
+                            if ($null -ne $mountDrive)
+                            {
+                                Write-Progress -Activity "Unmounting mount drive $mountDrive" -PercentComplete 90
+                                Write-Verbose "Unmounting mount drive $mountDrive"
+                                Remove-MountDrive $mountDrive -discard $true
+                                Write-Progress -Completed -Activity "Completed"
+                            }
+
+                            $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) cannot be installed on this edition of NanoServer"
+                            $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                            $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
+
+                            $PSCmdlet.ThrowTerminatingError($errorRecord)                    
+                        }
+                    }
+                }
             }
+        }
+        else
+        {
+            foreach ($packageToBeInstalled in $packagesToBeInstalled)
+            {
+                # this package can't be installed on standard
+                if (IsNanoServer)
+                {
+                    # if this is a nano, then systemSKU would be populated after isnanoserver call
+                    if (-not $packageToBeInstalled.Sku.Contains($script:systemSKU.ToString()))
+                    {
+                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) cannot be installed on this edition of NanoServer"
+                        $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                        $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
-            # mount image
-            $mountDrive = New-MountDrive
-
-            Write-Verbose "Mounting $ToVhd to $mountDrive"
-
-            Write-Progress -Activity "Mounting $ToVhd to $mountDrive" -PercentComplete 0
-
-            $null = Mount-WindowsImage -ImagePath $ToVhd -Index 1 -Path $mountDrive
+                        $PSCmdlet.ThrowTerminatingError($errorRecord)                    
+                    }
+                }
+            }
         }
 
         $discard = $false
@@ -498,9 +579,12 @@ function Install-NanoServerPackage
                 }
                 else
                 {
-                    Write-Progress -Activity "Getting available packages on $mountDrive" -PercentComplete 10
+                    if($PSCmdlet.ShouldProcess($mountDrive, "Get-WindowsPackage"))
+                    {
+                        Write-Progress -Activity "Getting available packages on $mountDrive" -PercentComplete 10
 
-                    $availablePackages = (Get-WindowsPackage -Path $mountDrive).PackageName.ToLower()
+                        $availablePackages = (Get-WindowsPackage -Path $mountDrive).PackageName.ToLower()
+                    }
                 }
             }
 
@@ -1232,7 +1316,7 @@ function IsNanoServer
     {
         $script:isNanoServerInitialized = $true
         $operatingSystem = Get-CimInstance -ClassName win32_operatingsystem
-        $systemSKU = $operatingSystem.OperatingSystemSKU
+        $script:systemSKU = $operatingSystem.OperatingSystemSKU
         $script:isNanoServer = ($systemSKU -eq 109) -or ($systemSKU -eq 144) -or ($systemSKU -eq 143)
         return $script:isNanoServer
     }
@@ -2131,6 +2215,7 @@ function Install-Package
     $version = $resultArray[1]
     #$source = $resultArray[2]
     $Culture = $resultArray[3]
+    $Sku = $resultArray[4]
 
     # if culture is a string, set it to null (this means user did not supply culture)
     if ($Culture.Contains(','))
@@ -2159,8 +2244,71 @@ function Install-Package
           
             $availablePackages = @(($script:imagePathCache[$fileKey]).Keys)
         }
+
+        # if this package does not apply to standard, we have to check whether the nano is standard or not
+        if (-not $Sku.Contains("144"))
+        {
+            $regKey = $null
+
+            try
+            {
+                reg load HKLM\NANOSERVERPACKAGEVHDSYS "$mountDrive\Windows\System32\config\SOFTWARE" | Out-Null
+                $regKey = dir 'HKLM:\NANOSERVERPACKAGEVHDSYS\Microsoft\Windows NT'
+                $mountedVHDEdition = $regKey.GetValue("EditionID")
+            }
+            catch
+            {
+                # ERROR
+                $mountedVHDEdition = "ERROR"
+            }
+            finally
+            {
+                try
+                {
+                    if ($regKey -ne $null)
+                    {
+                        $regKey.Handle.Close()
+                        [gc]::Collect()
+                        reg unload HKLM\NANOSERVERPACKAGEVHDSYS | Out-Null
+                    }
+                }
+                catch { }
+            }
+
+            if ($mountedVHDEdition -eq "ServerStandardNano")
+            {
+                # cannot be installed
+                # unmount
+                if ($null -ne $mountDrive)
+                {
+                    Write-Verbose "Unmounting mountdrive $mountDrive"
+                    Remove-MountDrive $mountDrive -discard $true
+                }
+
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "$name cannot be installed on this edition of NanoServer" `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
+        }
     }
     else {
+        if (IsNanoServer)
+        {
+            # if this is a nano, then systemSKU would be populated after isnanoserver call
+            if (-not $Sku.Contains($script:systemSKU.ToString()))
+            {
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "$name cannot be installed on this edition of NanoServer" `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }  
+        }
+
         if (-not $force) {
             $availablePackages = @($script:onlinePackageCache.Keys)
         }
@@ -2814,7 +2962,8 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
     $fastPackageReference = $package.Name + 
                                 $separator + $package.version + 
                                 $separator + $package.Source + 
-                                $separator + $Culture
+                                $separator + $Culture +
+                                $separator + $package.Sku
 
     $Name = [System.IO.Path]::GetFileNameWithoutExtension($package.Name)
 
