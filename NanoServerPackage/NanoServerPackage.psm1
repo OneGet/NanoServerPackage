@@ -15,7 +15,7 @@ $script:downloadedCabLocation = "$script:WindowsPackage\DownloadedCabs"
 $script:file_modules = "$script:WindowsPackage\sources.txt"
 $script:windowsPackageSources = $null
 $script:defaultPackageName = "NanoServerPackageSource"
-$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=708783&clcid=0x409"
+$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=723027&clcid=0x409"
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
 $script:systemSKU = -1
@@ -1242,16 +1242,31 @@ function Install-PackageHelper
         }
 
         $savedCabFilesToInstall = @()
+        $savedCabFilesToInstallTuple = @()
 
         foreach ($savedPackage in $savedPackages)
         {
-            # proceed with installation, we only need to install the language package, dism will handle installation of the base too
+            $basePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture "" -version $savedPackage.Version))
+
+            $basePackagePath = ""
+
+            if (Test-Path $basePackageFile) {
+                $savedCabFilesToInstall += $basePackageFile
+                $basePackagePath = $basePackageFile
+            }
+
+            # proceed with installation, 
             $languagePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture $Culture -version $savedPackage.Version))
+
+            $langPackagePath = ""
 
             if (Test-Path $languagePackageFile) {
                 $savedCabFilesToInstall += $languagePackageFile
                 $installedWindowsPackages += $savedPackage
+                $langPackagePath = $languagePackageFile
             }
+
+            $savedCabFilesToInstallTuple += ([System.Tuple]::Create($basePackagePath, $langPackagePath))
         }
 
         $restartNeeded = $false
@@ -1267,8 +1282,8 @@ function Install-PackageHelper
             }
             else
             {
-                Write-Verbose "Installing cab files $savedCabFilesToInstall"                
-                $successfullyInstalled.Value = Install-Online $savedCabFilesToInstall -restartNeeded ([ref]$restartNeeded)
+                Write-Verbose "Installing cab files $savedCabFilesToInstallTuple"                
+                $successfullyInstalled.Value = Install-Online $savedCabFilesToInstallTuple -restartNeeded ([ref]$restartNeeded)
 
                 if ($restartNeeded -and (-not $NoRestart))
                 {
@@ -3180,11 +3195,10 @@ function Install-Online
     [CmdletBinding()]
     param
     (
-        [string[]]$packagePaths,
+        $packagePaths,
         [ref]$restartNeeded
     )
 
-    $installedPackages = @()
     $rollBack = $false
 
     $count = 0;
@@ -3197,21 +3211,63 @@ function Install-Online
 
     try
     {
-        foreach ($packagePath in $packagePaths)
-        {
-            $percentComplete = $count*100/$packagePaths.Count -as [int]
-            Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
-            $count += 1;
+        # first package of each pair is base, second is language
 
-            $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
-    
-            # restart or not
-            if ($messages.RestartNeeded)
+        foreach ($packageTuple in $packagePaths)
+        {
+            $packagePath = $packageTuple.Item1
+
+            $messages = $null
+
+            $restart = $false
+
+            $percentComplete = $count*100/$packagePaths.Count -as [int]
+
+            # valid base path
+            if (-not [string]::IsNullOrWhiteSpace($packagePath))
             {
-                $restartNeeded.Value = $true
+                Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
+
+                Write-Verbose "Installing package $($packagePath)"
+
+                try
+                {
+                    $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore -ErrorAction SilentlyContinue
+
+                    if ($messages -ne $null -and $messages.RestartNeeded)
+                    {
+                        $restart = $true
+                    }
+                }
+                catch { }
             }
 
-            $installedPackages += $packagePath
+            # now install the language, even if the base fails, sometimes language will succeed
+            $packagePath = $packageTuple.Item2
+
+            if (-not [string]::IsNullOrWhiteSpace($packagePath))
+            {
+                Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
+
+                Write-Verbose "Installing package $($packagePath)"
+
+                # don't try catch here because if this fails, that is it
+                $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
+
+                # restart or not
+                if (-not $restart -and $messages -ne $null -and $messages.RestartNeeded)
+                {
+                    $restart = $true
+                }
+
+                if ($restart)
+                {
+                    $restartNeeded.Value = $true
+                }
+
+            }
+
+            $count += 1
         }
     }
     catch
@@ -3227,45 +3283,6 @@ function Install-Online
     finally
     {
         Write-Progress -Completed -Id $id -Activity "Completed"
-    }
-
-    if ($rollBack)
-    {    
-        Write-Verbose "Installation fails, we need to rollback"
-        $id = Write-Progress -ParentId 1 -Activity "Rolling back installed packages"
-        if (-not $id)
-        {
-            $id = 1
-        }
-        
-        $count = 0
-
-        try
-        {
-            foreach ($installedPackage in $installedPackages)
-            {
-                $percentComplete = $count*100/$installedPackages.Count -as [int]
-                Write-Progress -Activity "Uninstalling $installedPackage" -PercentComplete $percentComplete -Id $id
-                $count += 1;
-
-                Write-Verbose "Uninstalling package $installedPackage"
-                Remove-WindowsPackage -PackagePath $installedPackage -Online
-            }
-        }
-        catch
-        {
-            $rollBack = $true
-            ThrowError -CallerPSCmdlet $PSCmdlet `
-                        -ExceptionName $_.Exception.GetType().FullName `
-                        -ExceptionMessage $_.Exception.Message `
-                        -ExceptionObject $RequiredVersion `
-                        -ErrorId FailedToUnInstall `
-                        -ErrorCategory InvalidOperation
-        }
-        finally
-        {
-            Write-Progress -Completed -Id $id -Activity "Completed"
-        }
     }
 
     # returns whether we installed
