@@ -1629,6 +1629,128 @@ function DepthFirstVisit(
     return $true
 }
 
+<#
+Parse and return a dependency version
+The version string is either a simple version or an arithmetic range
+e.g.
+     1.0         --> 1.0 ≤ x
+     (,1.0]      --> x ≤ 1.0
+     (,1.0)      --> x lt 1.0
+     [1.0]       --> x == 1.0
+     (1.0,)      --> 1.0 lt x
+     (1.0, 2.0)   --> 1.0 lt x lt 2.0
+     [1.0, 2.0]   --> 1.0 ≤ x ≤ 2.0
+ 
+#>
+function CompareDependencyVersion([string]$dependencyVersionString, [version]$version)
+{
+    if ([string]::IsNullOrWhiteSpace($dependencyVersionString))
+    {
+        return $true
+    }
+
+    $dependencyVersionString = $dependencyVersionString.Trim()
+
+    $first = $dependencyVersionString[0]
+    $last = $dependencyVersionString[-1]
+    
+    if ($first -ne '(' -and $first -ne '[' -and $last -ne ']' -and $last -ne ')')
+    {
+        # stand alone so it is min inclusive
+        $versionToBeCompared = Convert-Version $dependencyVersionString
+
+        return ($versionToBeCompared -ge $version)        
+    }
+
+    # now dep version string must have length > 3
+    if ($dependencyVersionString.Length -lt 3)
+    {
+        return $true
+    }
+
+    if ($first -ne '(' -or $first -ne '[')
+    {
+        # first character must be either ( or [
+        return $true
+    }
+
+    if ($last -ne ']' -or $last -ne ')')
+    {
+        # last character must be either ] or )
+        return $true
+    }
+
+    # inclusive if the first or last is [ or ], otherwise exclusive
+    $minInclusive = ($first -eq '[')
+    $maxInclusive = ($last -eq ']')
+
+    $dependencyVersionString = $dependencyVersionString.Substring(1, $dependencyVersionString.Length - 2)
+
+    $parts = $dependencyVersionString.Split(',')
+    
+    if ($parts.Length -gt 2)
+    {
+        return $true
+    }
+
+    $minVersion = Convert-Version $parts[0]
+
+    if ($part.Length -eq 1)
+    {
+        $maxVersion = $minVersion
+    }
+    else
+    {
+        $maxVersion = Convert-Version $parts[1]
+    }
+
+    if ($minVersion -eq $null -and $maxVersion -eq $null)
+    {
+        return $true
+    }
+
+    # now we can compare
+    if ($minVersion -ne $null)
+    {
+        if ($minInclusive)
+        {
+            # min inclusive so version must be >= minversion
+            if ($version -lt $minVersion)
+            {
+                return $false
+            }
+        }
+        else
+        {
+            # not mininclusive so version must be > minversion
+            if ($version -le $minVersion)
+            {
+                return $false
+            }
+        }
+    }
+
+    if ($maxVersion -ne $null)
+    {
+        if ($maxInclusive)
+        {
+            if ($version -gt $maxVersion)
+            {
+                return $false
+            }
+        }
+        else
+        {
+            if ($version -lt $minVersion)
+            {
+                return $false
+            }
+        }
+    }
+
+    return $true
+}
+
 #endregion Helpers
 
 #region Source
