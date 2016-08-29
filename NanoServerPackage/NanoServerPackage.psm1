@@ -19,6 +19,7 @@ $script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=723027&
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
 $script:systemSKU = -1
+$script:systemVersion = $null
 $script:availablePackages = @()
 $separator = "|#|"
 
@@ -559,6 +560,16 @@ function Install-NanoServerPackage
 
                         $PSCmdlet.ThrowTerminatingError($errorRecord)                    
                     }
+
+                    # if this is nanoserver, then we should also have the version populated
+                    if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
+                    {
+                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver version $($packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer ($script:systemVersion)"
+                        $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                        $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
+
+                        $PSCmdlet.ThrowTerminatingError($errorRecord)
+                    }
                 }
             }
         }
@@ -799,6 +810,7 @@ function Find-Azure
             $obj | Add-Member NoteProperty Version $searchStuffEntry.Version
             $obj | Add-Member NoteProperty Description $searchStuffEntry.Description
             $obj | Add-Member NoteProperty SKU $searchStuffEntry.Sku
+            $obj | Add-Member NoteProperty NanoServerVersion $searchStuffEntry.NanoServerVersion
 
             $languageObj = New-Object PSObject
             $languageDictionary = $searchStuffEntry.Language
@@ -986,6 +998,7 @@ function Find-Azure
         $props= Get-Member -InputObject $langDict -MemberType NoteProperty
         $theSource = $Repository.Name
         $sku = [string]::Join(";", @($searchEntry.Sku))
+        $nanoServerVersion = $searchEntry.NanoServerVersion
 
         $dependencies = @()
         $dependenciesProperty = Get-Member -InputObject $searchEntry -MemberType NoteProperty -Name Dependencies
@@ -1020,6 +1033,7 @@ function Find-Azure
                 Culture = $Culture
                 Sku = $sku
                 Dependencies = $dependencies
+                NanoServerVersion = $NanoServerVersion
             })
             $ResultEntry.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo")
             $searchLanguageResults += $ResultEntry
@@ -1048,6 +1062,7 @@ function Find-Azure
                 Culture = $langListString
                 Sku = $sku
                 Dependencies = $dependencies
+                NanoServerVersion = $NanoServerVersion
             })
             $ResultEntry.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo")
             $searchLanguageResults += $ResultEntry
@@ -1332,6 +1347,7 @@ function IsNanoServer
         $script:isNanoServerInitialized = $true
         $operatingSystem = Get-CimInstance -ClassName win32_operatingsystem
         $script:systemSKU = $operatingSystem.OperatingSystemSKU
+        $script:systemVersion = [System.Environment]::OSVersion
         $script:isNanoServer = ($systemSKU -eq 109) -or ($systemSKU -eq 144) -or ($systemSKU -eq 143)
         return $script:isNanoServer
     }
@@ -1642,9 +1658,9 @@ e.g.
      [1.0, 2.0]   --> 1.0 ≤ x ≤ 2.0
  
 #>
-function CompareDependencyVersion([string]$dependencyVersionString, [version]$version)
+function NanoServerVersionMatched([string]$dependencyVersionString, [version]$version)
 {
-    if ([string]::IsNullOrWhiteSpace($dependencyVersionString))
+    if ([string]::IsNullOrWhiteSpace($dependencyVersionString) -or $version -eq $null)
     {
         return $true
     }
@@ -2353,6 +2369,7 @@ function Install-Package
     #$source = $resultArray[2]
     $Culture = $resultArray[3]
     $Sku = $resultArray[4]
+    $NanoServerVersion = $resultArray[5]
 
     # if culture is a string, set it to null (this means user did not supply culture)
     if ($Culture.Contains(','))
@@ -2383,20 +2400,28 @@ function Install-Package
         }
 
         # if this package does not apply to standard, we have to check whether the nano is standard or not
-        if (-not $Sku.Contains("144"))
+        if (-not $Sku.Contains("144") -or (-not [string]::IsNullOrWhiteSpace($NanoServerVersion)))
         {
             $regKey = $null
+
+            $mountedVhdEdition = "ERROR"
+            $vhdNanoServerVersion = $null
 
             try
             {
                 reg load HKLM\NANOSERVERPACKAGEVHDSYS "$mountDrive\Windows\System32\config\SOFTWARE" | Out-Null
                 $regKey = dir 'HKLM:\NANOSERVERPACKAGEVHDSYS\Microsoft\Windows NT'
                 $mountedVHDEdition = $regKey.GetValue("EditionID")
+                $majorVersion = $regKey.GetValue("CurrentMajorVersionNumber")
+                $minorVersion = $regKey.GetValue("CurrentMinorVersionNumber")
+                $buildVersion = $regKey.GetValue("CurrentBuildNumber")
+                $vhdNanoServerVersion = [version]::new($majorVersion, $minorVersion, $buildVersion, 0)
             }
             catch
             {
                 # ERROR
                 $mountedVHDEdition = "ERROR"
+                $vhdNanoServerVersion = $null
             }
             finally
             {
@@ -2412,7 +2437,8 @@ function Install-Package
                 catch { }
             }
 
-            if ($mountedVHDEdition -eq "ServerStandardNano")
+            # if this is not applicable to server standard nano
+            if (-not $Sku.Contains("144") -and $mountedVHDEdition -eq "ServerStandardNano")
             {
                 # cannot be installed
                 # unmount
@@ -2425,6 +2451,16 @@ function Install-Package
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
                             -ExceptionMessage "$name cannot be installed on this edition of NanoServer" `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($NanoServerVersion) -and -not (NanoServerVersionMatched -dependencyVersionString $NanoServerVersion -version $vhdNanoServerVersion))
+            {
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer ($script:systemVersion)" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
@@ -2443,7 +2479,18 @@ function Install-Package
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
-            }  
+            }
+
+            # if this is nanoserver, then we should also have the version populated
+            if (-not (NanoServerVersionMatched -dependencyVersionString $NanoServerVersion -version $script:systemVersion))
+            {
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer ($script:systemVersion)" `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
         }
 
         if (-not $force) {
@@ -3100,7 +3147,8 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
                                 $separator + $package.version + 
                                 $separator + $package.Source + 
                                 $separator + $Culture +
-                                $separator + $package.Sku
+                                $separator + $package.Sku +
+                                $separator + $package.NanoServerVersion
 
     $Name = [System.IO.Path]::GetFileNameWithoutExtension($package.Name)
 
@@ -3116,6 +3164,7 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
     }
 
     $details["Sku"] = $package.Sku
+    $details["NanoServerVersion"] = $package.NanoServerVersion
 
     $params = @{FastPackageReference = $fastPackageReference;
                 Name = $Name;
