@@ -3223,48 +3223,81 @@ function Install-Online
 
             $percentComplete = $count*100/$packagePaths.Count -as [int]
 
-            # valid base path
-            if (-not [string]::IsNullOrWhiteSpace($packagePath))
+            for($i = 0; $i -lt 2; $i += 1)
             {
-                Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
-
-                Write-Verbose "Installing package $($packagePath)"
-
-                try
+                # valid base path
+                if (-not [string]::IsNullOrWhiteSpace($packagePath))
                 {
-                    $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore -ErrorAction SilentlyContinue
+                    Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
 
-                    if ($messages -ne $null -and $messages.RestartNeeded)
+                    try
                     {
-                        $restart = $true
+                        $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore -ErrorAction Ignore
+
+                        if ($messages -ne $null -and $messages.RestartNeeded)
+                        {
+                            $restart = $true
+                        }
+                    }
+                    catch { }
+                }
+
+                # now install the language, even if the base fails, sometimes language will succeed
+                $packagePath = $packageTuple.Item2
+
+                if (-not [string]::IsNullOrWhiteSpace($packagePath))
+                {
+                    Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
+
+                    $hasError = $false
+
+                    # first try
+                    if ($i -eq 0)
+                    {
+                        # try catch for the first time we install
+                        try
+                        {
+                            # don't try catch here because if this fails, that is it
+                            $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
+
+                            # restart or not
+                            if (-not $restart -and $messages -ne $null -and $messages.RestartNeeded)
+                            {
+                                $restart = $true
+                            }
+
+                            if ($restart)
+                            {
+                                $restartNeeded.Value = $true
+                            }
+                        }
+                        catch { $hasError = $true }
+
+                        # no error, break out
+                        if (-not $hasError)
+                        {
+                            break
+                        }
+                    }
+                    else
+                    {
+                        Write-Verbose "Trying to install $packagePath for a second time"
+
+                        # don't try catch here because if this fails, that is it
+                        $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
+
+                        # restart or not
+                        if (-not $restart -and $messages -ne $null -and $messages.RestartNeeded)
+                        {
+                            $restart = $true
+                        }
+
+                        if ($restart)
+                        {
+                            $restartNeeded.Value = $true
+                        }
                     }
                 }
-                catch { }
-            }
-
-            # now install the language, even if the base fails, sometimes language will succeed
-            $packagePath = $packageTuple.Item2
-
-            if (-not [string]::IsNullOrWhiteSpace($packagePath))
-            {
-                Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
-
-                Write-Verbose "Installing package $($packagePath)"
-
-                # don't try catch here because if this fails, that is it
-                $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
-
-                # restart or not
-                if (-not $restart -and $messages -ne $null -and $messages.RestartNeeded)
-                {
-                    $restart = $true
-                }
-
-                if ($restart)
-                {
-                    $restartNeeded.Value = $true
-                }
-
             }
 
             $count += 1
