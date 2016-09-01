@@ -490,23 +490,31 @@ function Install-NanoServerPackage
                 foreach ($packageToBeInstalled in $packagesToBeInstalled)
                 {
                     # if this package can't be install on standard, should do a check
-                    if (-not $packageToBeInstalled.Sku.Contains("144"))
+                    if (-not $packageToBeInstalled.Sku.Contains("144") -or (-not [string]::IsNullOrWhiteSpace($packageToBeInstalled.NanoServerVersion)))
                     {
                         # initialize the regkey
                         if ($mountedVHDEdition -eq $null)
                         {
                             $regKey = $null
 
+                            $vhdNanoServerVersion = $null
+                            $mountedVHDEdition = "ERROR"
+
                             try
                             {
                                 reg load HKLM\NANOSERVERPACKAGEVHDSYS "$mountDrive\Windows\System32\config\SOFTWARE" | Out-Null
                                 $regKey = dir 'HKLM:\NANOSERVERPACKAGEVHDSYS\Microsoft\Windows NT'
                                 $mountedVHDEdition = $regKey.GetValue("EditionID")
+                                $majorVersion = $regKey.GetValue("CurrentMajorVersionNumber")
+                                $minorVersion = $regKey.GetValue("CurrentMinorVersionNumber")
+                                $buildVersion = $regKey.GetValue("CurrentBuildNumber")
+                                $vhdNanoServerVersion = [version]::new($majorVersion, $minorVersion, $buildVersion, 0)
                             }
                             catch
                             {
                                 # ERROR
                                 $mountedVHDEdition = "ERROR"
+                                $vhdNanoServerVersion = $null
                             }
                             finally
                             {
@@ -523,7 +531,25 @@ function Install-NanoServerPackage
                             }
                         }
 
-                        if ($mountedVHDEdition -eq "ServerStandardNano")
+                        if (-not [string]::IsNullOrWhiteSpace($packageToBeInstalled.NanoServerVersion) -and -not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $vhdNanoServerVersion))
+                        {
+                            # unmount the drive
+                            if ($null -ne $mountDrive)
+                            {
+                                Write-Progress -Activity "Unmounting mount drive $mountDrive" -PercentComplete 90
+                                Write-Verbose "Unmounting mount drive $mountDrive"
+                                Remove-MountDrive $mountDrive -discard $true
+                                Write-Progress -Completed -Activity "Completed"
+                            }
+
+                            $exception = New-Object System.ArgumentException "$name which requires nanoserver version $($packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $vhdNanoServerVersion"
+                            $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                            $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
+
+                            $PSCmdlet.ThrowTerminatingError($errorRecord)                    
+                        }
+
+                        if (-not $packageToBeInstalled.Sku.Contains("144") -and $mountedVHDEdition -eq "ServerStandardNano")
                         {
                             # unmount the drive
                             if ($null -ne $mountDrive)
@@ -564,7 +590,7 @@ function Install-NanoServerPackage
                     # if this is nanoserver, then we should also have the version populated
                     if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
                     {
-                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver version $($packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer ($script:systemVersion)"
+                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver version $($packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $script:systemVersion"
                         $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                         $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
 
@@ -1347,7 +1373,7 @@ function IsNanoServer
         $script:isNanoServerInitialized = $true
         $operatingSystem = Get-CimInstance -ClassName win32_operatingsystem
         $script:systemSKU = $operatingSystem.OperatingSystemSKU
-        $script:systemVersion = [System.Environment]::OSVersion
+        $script:systemVersion = [System.Environment]::OSVersion.Version
         $script:isNanoServer = ($systemSKU -eq 109) -or ($systemSKU -eq 144) -or ($systemSKU -eq 143)
         return $script:isNanoServer
     }
@@ -1684,13 +1710,13 @@ function NanoServerVersionMatched([string]$dependencyVersionString, [version]$ve
         return $true
     }
 
-    if ($first -ne '(' -or $first -ne '[')
+    if ($first -ne '(' -and $first -ne '[')
     {
         # first character must be either ( or [
         return $true
     }
 
-    if ($last -ne ']' -or $last -ne ')')
+    if ($last -ne ']' -and $last -ne ')')
     {
         # last character must be either ] or )
         return $true
@@ -1711,7 +1737,7 @@ function NanoServerVersionMatched([string]$dependencyVersionString, [version]$ve
 
     $minVersion = Convert-Version $parts[0]
 
-    if ($part.Length -eq 1)
+    if ($parts.Length -eq 1)
     {
         $maxVersion = $minVersion
     }
@@ -1757,7 +1783,7 @@ function NanoServerVersionMatched([string]$dependencyVersionString, [version]$ve
         }
         else
         {
-            if ($version -lt $minVersion)
+            if ($version -ge $maxVersion)
             {
                 return $false
             }
@@ -2460,7 +2486,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer ($script:systemVersion)" `
+                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer $vhdNanoServerVersion" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
@@ -2486,7 +2512,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer ($script:systemVersion)" `
+                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer $script:systemVersion" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
