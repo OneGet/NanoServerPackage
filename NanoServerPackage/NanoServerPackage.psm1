@@ -542,7 +542,7 @@ function Install-NanoServerPackage
                                 Write-Progress -Completed -Activity "Completed"
                             }
 
-                            $exception = New-Object System.ArgumentException "$name which requires nanoserver version $($packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $vhdNanoServerVersion"
+                            $exception = New-Object System.ArgumentException "$name which requires nanoserver version $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $vhdNanoServerVersion"
                             $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                             $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
@@ -590,7 +590,7 @@ function Install-NanoServerPackage
                     # if this is nanoserver, then we should also have the version populated
                     if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
                     {
-                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver version $($packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $script:systemVersion"
+                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver version $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $script:systemVersion"
                         $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                         $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
 
@@ -1793,6 +1793,97 @@ function NanoServerVersionMatched([string]$dependencyVersionString, [version]$ve
     return $true
 }
 
+function ConvertNanoServerVersionToString([string]$NanoServerVersion)
+{
+    $result = $NanoServerVersion
+
+    if ([string]::IsNullOrWhiteSpace($NanoServerVersion))
+    {
+        return $result
+    }
+
+    $NanoServerVersion = $NanoServerVersion.Trim()
+
+    $first = $NanoServerVersion[0]
+    $last = $NanoServerVersion[-1]
+    
+    if ($first -ne '(' -and $first -ne '[' -and $last -ne ']' -and $last -ne ')')
+    {
+        return "version at least $NanoServerVersion (inclusive)"
+    }
+
+    # now dep version string must have length > 3
+    if ($dependencyVersionString.Length -lt 3)
+    {
+        return $NanoServerVersion
+    }
+
+    if ($first -ne '(' -and $first -ne '[')
+    {
+        # first character must be either ( or [
+        return $NanoServerVersion
+    }
+
+    if ($last -ne ']' -and $last -ne ')')
+    {
+        # last character must be either ] or )
+        return $NanoServerVersion
+    }
+
+    # inclusive if the first or last is [ or ], otherwise exclusive
+    $minInclusive = ($first -eq '[')
+    $maxInclusive = ($last -eq ']')
+
+    $NanoServerVersion = $NanoServerVersion.Substring(1, $NanoServerVersion.Length - 2)
+
+    $parts = $NanoServerVersion.Split(',')
+    
+    if ($parts.Length -gt 2)
+    {
+        return $NanoServerVersion
+    }
+
+    $minVersion = $parts[0]
+
+    if ($parts.Length -eq 1)
+    {
+        $maxVersion = $minVersion
+    }
+    else
+    {
+        $maxVersion = $parts[1]
+    }
+
+    if ($minVersion -eq $null -and $maxVersion -eq $null)
+    {
+        return $NanoServerVersion
+    }
+
+    $result = ""
+
+    # now we can compare
+    if ($minVersion -ne $null)
+    {
+        $result += "version at least $minVersion"
+
+        if ($minInclusive)
+        {
+            $result += " (inclusive)"
+        }
+    }
+
+    if ($maxVersion -ne $null)
+    {
+        $result += "version at most $maxVersion"
+        if ($maxInclusive)
+        {
+            $result += " (inclusive)"
+        }
+    }
+
+    return $result
+}
+
 #endregion Helpers
 
 #region Source
@@ -2486,7 +2577,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer $vhdNanoServerVersion" `
+                            -ExceptionMessage "$name which requires nanoserver version $(ConvertNanoServerVersionToString $NanoServerVersion) cannot be installed on this version of NanoServer $vhdNanoServerVersion" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
@@ -2512,7 +2603,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name which requires nanoserver version $NanoServerVersion cannot be installed on this version of NanoServer $script:systemVersion" `
+                            -ExceptionMessage "$name which requires nanoserver version $(ConvertNanoServerVersionToString $NanoServerVersion) cannot be installed on this version of NanoServer $script:systemVersion" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
