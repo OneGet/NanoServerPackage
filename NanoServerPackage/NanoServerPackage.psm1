@@ -542,7 +542,7 @@ function Install-NanoServerPackage
                                 Write-Progress -Completed -Activity "Completed"
                             }
 
-                            $exception = New-Object System.ArgumentException "$name which requires nanoserver version $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $vhdNanoServerVersion"
+                            $exception = New-Object System.ArgumentException "$name which requires nanoserver $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion) cannot be installed on this NanoServer which has version $vhdNanoServerVersion"
                             $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                             $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
@@ -590,7 +590,7 @@ function Install-NanoServerPackage
                     # if this is nanoserver, then we should also have the version populated
                     if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
                     {
-                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver version $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion) cannot be installed on this version of NanoServer $script:systemVersion"
+                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) which requires nanoserver $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion) cannot be installed on this NanoServer which has version $script:systemVersion"
                         $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                         $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
 
@@ -1813,7 +1813,7 @@ function ConvertNanoServerVersionToString([string]$NanoServerVersion)
     }
 
     # now dep version string must have length > 3
-    if ($dependencyVersionString.Length -lt 3)
+    if ($NanoServerVersion.Length -lt 3)
     {
         return $NanoServerVersion
     }
@@ -1862,7 +1862,7 @@ function ConvertNanoServerVersionToString([string]$NanoServerVersion)
     $result = ""
 
     # now we can compare
-    if ($minVersion -ne $null)
+    if (-not [string]::IsNullOrWhiteSpace($minVersion))
     {
         $result += "version at least $minVersion"
 
@@ -1872,7 +1872,7 @@ function ConvertNanoServerVersionToString([string]$NanoServerVersion)
         }
     }
 
-    if ($maxVersion -ne $null)
+    if (-not [string]::IsNullOrWhiteSpace($maxVersion))
     {
         $result += "version at most $maxVersion"
         if ($maxInclusive)
@@ -2577,7 +2577,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name which requires nanoserver version $(ConvertNanoServerVersionToString $NanoServerVersion) cannot be installed on this version of NanoServer $vhdNanoServerVersion" `
+                            -ExceptionMessage "$name which requires nanoserver $(ConvertNanoServerVersionToString $NanoServerVersion) cannot be installed on this NanoServer which has version $vhdNanoServerVersion" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
@@ -2603,7 +2603,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name which requires nanoserver version $(ConvertNanoServerVersionToString $NanoServerVersion) cannot be installed on this version of NanoServer $script:systemVersion" `
+                            -ExceptionMessage "$name which requires nanoserver $(ConvertNanoServerVersionToString $NanoServerVersion) cannot be installed on this NanoServer which has version $script:systemVersion" `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
