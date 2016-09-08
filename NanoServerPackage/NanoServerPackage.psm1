@@ -66,6 +66,15 @@ function Find-NanoServerPackage
 
     foreach($package in $packages) {
         Microsoft.PowerShell.Utility\Add-Member -InputObject $package -MemberType NoteProperty -Name "Description" -Value $package.Summary
+        
+        try {
+            if ($package.Metadata["NanoServerVersion"] -ne $null)
+            {
+                Microsoft.PowerShell.Utility\Add-Member -InputObject $package -MemberType NoteProperty -Name "NanoServerVersion" -Value (ConvertNanoServerVersionToString $package.Metadata["NanoServerVersion"][0])
+            }
+        }
+        catch {}
+
         $package.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo") | Out-Null
         $package
     }
@@ -542,7 +551,7 @@ function Install-NanoServerPackage
                                 Write-Progress -Completed -Activity "Completed"
                             }
 
-                            $exception = New-Object System.ArgumentException "$name requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). The current NanoServer has version $vhdNanoServerVersion. Please run 'Find-NanoServerPackage $name -AllVersions' to find the correct version and run 'Install-NanoServerPackage $name -RequiredVersion <Correct Version>' to install the correct version."
+                            $exception = New-Object System.ArgumentException "The package '$name' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). The current NanoServer has version $vhdNanoServerVersion which is out of this range. Please run 'Find-NanoServerPackage $name -AllVersions | select name,version,NanoServerVersion' and use the NanoServerVersion property, which specifies the version range of the NanoServer that a package can be installed on, to find a suitable version. After that, run 'Install-NanoServerPackage $name -RequiredVersion <Correct Version>' to install that version."
                             $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                             $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
@@ -590,7 +599,7 @@ function Install-NanoServerPackage
                     # if this is nanoserver, then we should also have the version populated
                     if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
                     {
-                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). The current NanoServer has version $script:systemVersion. Please run 'Find-NanoServerPackage $($packageToBeInstalled.Name) -AllVersions' to find the correct version and run 'Install-NanoServerPackage $($packageToBeInstalled.Name) -RequiredVersion <Correct Version>' to install the correct version."
+                        $exception = New-Object System.ArgumentException "The package '$($packageToBeInstalled.Name)' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). The current NanoServer has version $script:systemVersion which is out of this range. Please run 'Find-NanoServerPackage $($packageToBeInstalled.Name) -AllVersions | select name,version,NanoServerVersion' and use the NanoServerVersion property, which specifies the version range of the NanoServer that a package can be installed on, to find a suitable version (the version range notation used is based on https://docs.nuget.org/create/versioning). After that, run 'Install-NanoServerPackage $($packageToBeInstalled.Name) -RequiredVersion <Correct Version>' to install the correct version."
                         $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                         $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
 
@@ -2583,7 +2592,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name requires $(ConvertNanoServerVersionToString $NanoServerVersion). The current NanoServer has version $vhdNanoServerVersion. Please run 'Find-NanoServerPackage $name -AllVersions' to find the correct version and run 'Install-NanoServerPackage $name -RequiredVersion <Correct Version>' to install the correct version." `
+                            -ExceptionMessage "The package '$name' with version $version requires $(ConvertNanoServerVersionToString $NanoServerVersion). The current NanoServer has version $vhdNanoServerVersion which is out of this range. Please run 'Find-NanoServerPackage $name -AllVersions | select name,version,NanoServerVersion' and use the NanoServerVersion property, which specifies the version range of the NanoServer that a package can be installed on, to find a suitable version. After that, run 'Install-NanoServerPackage $name -RequiredVersion <Correct Version>' to install the correct version." `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
@@ -2609,7 +2618,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "$name requires $(ConvertNanoServerVersionToString $NanoServerVersion). The current NanoServer has version $script:systemVersion. Please run 'Find-NanoServerPackage $name -AllVersions' to find the correct version and run 'Install-NanoServerPackage $name -RequiredVersion <Correct Version>' to install the correct version." `
+                            -ExceptionMessage "The package '$name' with version $version requires $(ConvertNanoServerVersionToString $NanoServerVersion). The current NanoServer has version $script:systemVersion which is out of this range. Please run 'Find-NanoServerPackage $name -AllVersions | select name,version,NanoServerVersion' and use the NanoServerVersion property, which specifies the version range of the NanoServer that a package can be installed on, to find a suitable version. After that, run 'Install-NanoServerPackage $name -RequiredVersion <Correct Version>' to install the correct version." `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
