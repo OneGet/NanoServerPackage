@@ -2,7 +2,13 @@
 A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to find and install Optional Windows Packages (Windows feature and role) for NanoServer. For general information about these packages, please refer to the <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a>.
 
 ##### Note 
-The current public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016. It DOES NOT support Nano Server with newer version of TP5. Please make sure you use the correct version of NanoServerPackage provider.
+The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016, and vice versa. It DOES NOT support Nano Server with newer version of TP5. Please make sure you use the correct version of NanoServerPackage provider according to your Nano Server version. If you have TP5 Nano Server, you will specify both the provider version and package version. i.e.
+```
+# Your Nano Server OS version is 10.0.14300.1000
+Install-PackageProvider NanoServerPackage -requiredVersion 0.1.1.0
+Install-NanoServerPackage <package name> -requiredVersion 10.0.14300.1000
+```
+If you have newer version of Nano Server, you will not need to specify the version for either the provider or the package. You can follow up the steps and examples below.
 
 ## Installing the provider
 You can install the provider from PowerShellGallery using the following PackageManagement commands:
