@@ -8,7 +8,6 @@ The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGall
 Install-PackageProvider NanoServerPackage -requiredVersion 0.1.1.0
 Install-NanoServerPackage <package name> -requiredVersion 10.0.14300.1000
 ```
-If you have newer version of Nano Server, you will not need to specify the version for either the provider or the package. You can follow up the steps and examples below.
 
 ## Installing the provider
 You can install the provider from PowerShellGallery using the following PackageManagement commands:
