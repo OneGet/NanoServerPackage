@@ -9,6 +9,11 @@ Install-PackageProvider NanoServerPackage -requiredVersion 0.1.1.0
 Install-NanoServerPackage <package name> -requiredVersion 10.0.14300.1000
 ```
 
+To install the latest version of the provider 1.0.0.0 that works for OS newer than 10.0.14300.1000, use the following steps.
+```
+Save-Module -Path 'C:\Program Files\WindowsPowerShell\Modules\' -Name NanoServerPackage -RequiredVersion 1.0.0.0
+Import-PackageProvider NanoServerPackage
+```
 ## Installing the provider
 You can install the provider from PowerShellGallery using the following PackageManagement commands:
 ```
