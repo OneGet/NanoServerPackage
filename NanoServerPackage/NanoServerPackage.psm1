@@ -412,10 +412,7 @@ function Install-NanoServerPackage
         [System.String]$ToVhd,
 
         [parameter()]
-        [switch]$Force,
-
-        [parameter()]
-        [switch]$NoRestart
+        [switch]$Force
 
 <#        [Parameter(ParameterSetName='NameParameterSet')]
         [ValidateNotNullOrEmpty()]
@@ -654,7 +651,6 @@ function Install-NanoServerPackage
                                                             -availablePackages $availablePackages `
                                                             -successfullyInstalled ([ref]$success) `
                                                             -Force:$Force `
-                                                            -NoRestart:$NoRestart `
                                                             -PackagesToBeInstalled $packagesToBeInstalled
 #-source $source `
 
@@ -1159,7 +1155,6 @@ function Install-PackageHelper
         [version][Alias('Version')]$RequiredVersion,
         [string[]]$availablePackages,
         [switch]$Force,
-        [switch]$NoRestart,
         [PSCustomObject[]]$PackagesToBeInstalled
     )
 
@@ -1335,7 +1330,7 @@ function Install-PackageHelper
                 Write-Verbose "Installing cab files $savedCabFilesToInstallTuple"                
                 $successfullyInstalled.Value = Install-Online $savedCabFilesToInstallTuple -restartNeeded ([ref]$restartNeeded)
 
-                if ($restartNeeded -and (-not $NoRestart))
+                if ($restartNeeded)
                 {
                     Write-Warning "Restart is needed to complete installation"
                 }
@@ -2446,8 +2441,6 @@ function Install-Package
 
     $options = $request.Options
 
-    $NoRestart = $false
-
     $force = $false
 
     # check out what options the users give us
@@ -2471,11 +2464,6 @@ function Install-Package
         if ($options.ContainsKey("Culture"))
         {
             $languageChosen = $options['Culture']
-        }
-
-        if ($options.ContainsKey("NoRestart"))
-        {
-            $NoRestart = $options['NoRestart']
         }
     }
 
@@ -2637,7 +2625,6 @@ function Install-Package
                                                     -Version $convertedVersion `
                                                     -mountDrive $mountDrive `
                                                     -successfullyInstalled ([ref]$success) `
-                                                    -NoRestart:$NoRestart `
                                                     -availablePackages: $availablePackages
 
         foreach ($installedPackage in $installedPackages)
@@ -3043,8 +3030,6 @@ function Uninstall-Package
 
     $options = $request.Options
 
-    $NoRestart = $false
-
     $force = $false
 
     $languageChosen = $null
@@ -3070,11 +3055,6 @@ function Uninstall-Package
         if ($options.ContainsKey("Culture"))
         {
             $languageChosen = $options['Culture']
-        }
-
-        if ($options.ContainsKey("NoRestart"))
-        {
-            $NoRestart = $options['NoRestart']
         }
     }
 
@@ -3201,7 +3181,7 @@ function Uninstall-Package
             }
         }
 
-        if ($restart -and (-not $NoRestart))
+        if ($restart)
         {
             Write-Warning "Restart is needed to complete installation"
         }
@@ -3231,8 +3211,6 @@ function Get-DynamicOptions
         # This is for dynamic options used by install/uninstall and get-packages
         Install 
         {
-            # Switch to display culture
-            Write-Output -InputObject (New-DynamicOption -Category $Category -Name "NoRestart" -ExpectedType Switch -IsRequired $false)
             # Provides path to image
             Write-Output -InputObject (New-DynamicOption -Category $category -Name "ToVhd" -ExpectedType File -IsRequired $false)
             Write-Output -InputObject (New-DynamicOption -Category $category -Name "FromVhd" -ExpectedType File -IsRequired $false)
