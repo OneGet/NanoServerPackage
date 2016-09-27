@@ -1,17 +1,18 @@
 # only have 1 version for now :(
 $minVersion = "10.0.14300.1000"
-$maxVersion = "10.0.14300.1000"
-$requiredVersion = "10.0.14300.1000"
+$maxVersion = "10.0.14393.1000"
+$requiredVersion = "10.0.14393.0"
+$totalPackages="17"
+$computePackage = "Microsoft-NanoServer-Compute-Package"
 
-
-Describe “Find-NanoServerPackage Stand-Alone" {
+Describe "Find-NanoServerPackage Stand-Alone" {
 
     BeforeAll {
         Import-packageprovider -force -name NanoServerPackage
         Import-module NanoServerPackage -force
 
         $cultures = ("cs-cz", "de-de", "en-us", "es-es", "fr-fr", "hu-hu", "it-it", "ja-jp", "ko-kr", "nl-nl", "pl-pl", "pt-br", "pt-pt", "ru-ru", "sv-se", "tr-tr", "zh-cn", "zh-tw")        
-        $names = ("containers", "nanoserver-compute", "defender", "npds", "dcb")
+        $names = ("containers", "nanoserver-compute", "defender", "dcb")
     }
 
     AfterAll {
@@ -22,7 +23,8 @@ Describe “Find-NanoServerPackage Stand-Alone" {
         
         $command = "Find-NanoServerPackage"
         $results = Invoke-Expression $command
-        $results.count | should be 18
+        #Conformed that we have a total of 17 packages and each has 18 lang
+        $results.count | should be $totalPackages
     }
 
     It "Find NanoServerPackage Name" {
@@ -30,7 +32,7 @@ Describe “Find-NanoServerPackage Stand-Alone" {
         $name = $names | Get-Random
         $nameWithWildCards = "*" + $name + "*"
         $results = @()
-        $results += (Find-NanoServerPackage -Name $nameWithWildCards)
+        $results += (Find-NanoServerPackage -Name $nameWithWildCards -Verbose)
         $results.count | should be 1
 
         foreach($result in $results)
@@ -46,13 +48,12 @@ Describe “Find-NanoServerPackage Stand-Alone" {
     }
     
     It "Find NanoServerPackage Minimum Version" {
-        $command = "Find-NanoServerPackage -MinimumVersion 10.0.10586.103"
-        {Invoke-Expression $command} | should throw
-    }
+        $command = Find-NanoServerPackage -MinimumVersion 10.0.10586.103 -name $computePackage
+        $command.Name | should match $computePackage
+    } 
 
     It "Find NanoServerPackage Maximum Version" {
-        $command = "Find-NanoServerPackage -MaximumVersion 10.0.10586.105"
-        {Invoke-Expression $command} | should throw        
+         Find-NanoServerPackage -MaximumVersion 10.0.10586.105 -name $computePackage -ErrorAction SilentlyContinue | should throw         
     }
     
     It "Find NanoServerPackage Name, Minimum Version" {
@@ -98,7 +99,7 @@ Describe “Find-NanoServerPackage Stand-Alone" {
         
         $results = @()
         $results += (Find-NanoServerPackage -AllVersions)
-        $results.count | should be 18
+        $results.count | should be $totalPackages
     }
 
     It "Find NanoServerPackage All Versions with Name" {
@@ -119,7 +120,7 @@ Describe “Find-NanoServerPackage Stand-Alone" {
     It "Find NanoServerPackage Required Version" {
         $results = @()
         $results += (Find-NanoServerPackage -RequiredVersion $requiredVersion)
-        $results.count | should be 18
+        $results.count | should be $totalPackages
 
         foreach($result in $results)
         {
@@ -147,7 +148,7 @@ Describe “Find-NanoServerPackage Stand-Alone" {
         $culture = $cultures | Get-Random
         $command = "Find-NanoServerPackage -Culture $culture"
         $results = Invoke-Expression $command
-        $results.count | should be 18
+        $results.count | should be $totalPackages
 
         foreach($result in $results)
         {
@@ -257,10 +258,11 @@ Describe “Find-NanoServerPackage Stand-Alone" {
     }
 
     It "Find NanoServerPackage with Dependencies" {
-        $scvmmCompute = Find-NanoServerPackage *scvmm-compute* -RequiredVersion 10.0.14300.1000
-        $scvmmCompute.Dependencies[0] | should match "nanoserverpackage:Microsoft-NanoServer-SCVMM-Package/10.0.14300.1000"
-        $scvmmCompute.Dependencies[1] | should match "nanoserverpackage:Microsoft-NanoServer-Compute-Package/10.0.14300.1000"
+        $scvmmCompute = Find-NanoServerPackage *scvmm-compute* -RequiredVersion $requiredVersion
+        $scvmmCompute.Dependencies[0] | should match "nanoserverpackage:Microsoft-NanoServer-SCVMM-Package/$requiredVersion"
+        $scvmmCompute.Dependencies[1] | should match "nanoserverpackage:Microsoft-NanoServer-Compute-Package/$requiredVersion"
     }
+
 }
 
 Describe "NanoServerPackage OneGet" {
@@ -270,7 +272,7 @@ Describe "NanoServerPackage OneGet" {
         Import-module NanoServerPackage -force
 
         $cultures = ("cs-cz", "de-de", "en-us", "es-es", "fr-fr", "hu-hu", "it-it", "ja-jp", "ko-kr", "nl-nl", "pl-pl", "pt-br", "pt-pt", "ru-ru", "sv-se", "tr-tr", "zh-cn", "zh-tw")        
-        $names = ("containers", "nanoserver-compute", "defender", "npds", "dcb")
+        $names = ("containers", "nanoserver-compute", "defender",  "dcb")
     }
 
     AfterAll {
@@ -281,7 +283,7 @@ Describe "NanoServerPackage OneGet" {
         
         $command = "Find-Package -ProviderName NanoServerPackage"
         $results = Invoke-Expression $command
-        $results.count | should be 18
+        $results.count | should be $totalPackages
     }
 
     It "Find NanoServerPackage Name" {
@@ -304,13 +306,12 @@ Describe "NanoServerPackage OneGet" {
     }
     #>
     It "Find NanoServerPackage Minimum Version" {
-        $command = "Find-NanoServerPackage -MinimumVersion 10.0.10586.103"
-        {Invoke-Expression $command} | should throw
+        $command = Find-NanoServerPackage -MinimumVersion 10.0.10586.103 -name $computePackage
+        $command.Name | should match $computePackage
     }
 
     It "Find NanoServerPackage Maximum Version" {
-        $command = "Find-NanoServerPackage -MaximumVersion 10.0.10586.105"
-        {Invoke-Expression $command} | should throw
+        Find-NanoServerPackage -MaximumVersion 10.0.10586.105 -name $computePackage -ErrorAction SilentlyContinue | should throw
     }
     
     It "Find NanoServerPackage Name, Minimum Version" {
@@ -356,7 +357,7 @@ Describe "NanoServerPackage OneGet" {
         
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -AllVersions)
-        $results.count | should be 18
+        $results.count | should be $totalPackages
     }
 
     It "Find NanoServerPackage All Versions with Name" {
@@ -377,7 +378,7 @@ Describe "NanoServerPackage OneGet" {
     It "Find NanoServerPackage Required Version" {
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -RequiredVersion $requiredVersion)
-        $results.count | should be 18
+        $results.count | should be $totalPackages
 
         foreach($result in $results)
         {
@@ -405,7 +406,7 @@ Describe "NanoServerPackage OneGet" {
         $culture = $cultures | Get-Random
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Culture $culture)
-        $results.count | should be 18
+        $results.count | should be $totalPackages
 
         foreach($result in $results)
         {
@@ -514,8 +515,7 @@ Describe "NanoServerPackage OneGet" {
         }
     }
 
-    It "Find NanoServerPackage with Dependencies" {
-        $scvmmComputePackages = (Find-Package *scvmm-compute* -RequiredVersion 10.0.14300.1000 -ProviderName NanoServerPackage -IncludeDependencies)
+    It "Find NanoServerPackage with Dependencies" {$scvmmComputePackages = (Find-Package *scvmm-compute* -RequiredVersion $requiredVersion -ProviderName NanoServerPackage -IncludeDependencies)
         $scvmmComputePackages.Count | should be 3
 
         $scvmmComputePackages.Name -contains "microsoft-nanoserver-compute-package" | should be $true
@@ -523,3 +523,4 @@ Describe "NanoServerPackage OneGet" {
         $scvmmComputePackages.Name -contains "microsoft-nanoserver-scvmm-compute-package" | should be $true
     }
 }
+
