@@ -48,16 +48,10 @@ function Find-NanoServerPackage
         $RequiredVersion,
 
         [switch]
-        $AllVersions,
-        
-#        [string[]]
-#        $Repository,
+        $AllVersions,        
 
         [string]
-        $Culture,
-
-        [switch]
-        $Force
+        $Culture
     )
     
     $PSBoundParameters["Provider"] = $script:providerName
@@ -450,14 +444,20 @@ function Install-NanoServerPackage
         }
 
         $packagesToBeInstalled = @()
-
+              
         # do a find first, if there are any errors, don't install
         $packagesToBeInstalled += (Find -Name $Name -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion -RequiredVersion $RequiredVersion `
             -Culture $Culture -ErrorAction Stop) # -Repository $Repository
-
+      
         if ($packagesToBeInstalled.Count -eq 0)
-        {
-            return
+        { 
+            ThrowError -CallerPSCmdlet $PSCmdlet `
+                -ExceptionName System.Exception `
+                -ExceptionMessage ("Package '{0}' not found" -f $Name) `
+                -ExceptionObject $packageName `
+                -ErrorId PackageNotFound `
+                -ErrorCategory InvalidData
+            
         }
 
         $mountDrive = $null
@@ -1365,6 +1365,9 @@ function Install-PackageHelper
 ### Look into the win32 operating system class
 ### Returns True if running on Nano 
 ### False otherwise
+### 144: Server Standard
+### 143: Server Datacenter
+### 109: Test Images
 ###
 function IsNanoServer
 {
