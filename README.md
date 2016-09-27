@@ -2,22 +2,19 @@
 A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to find and install Optional Windows Packages (Windows feature and role) for NanoServer. For general information about these packages, please refer to the <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a>.
 
 ##### Note 
-The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016, and vice versa. It DOES NOT support Nano Server with newer version of TP5. Please make sure you use the correct version of NanoServerPackage provider according to your Nano Server version. If you have TP5 Nano Server, you will specify both the provider version and package version. i.e.
-```
-# Your Nano Server OS version is 10.0.14300.1000
-Install-PackageProvider NanoServerPackage -requiredVersion 0.1.1.0
-Install-NanoServerPackage <package name> -requiredVersion 10.0.14300.1000
-```
+The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016, and vice versa. It DOES NOT support Nano Server with newer version of TP5. Please make sure you use the correct version of NanoServerPackage provider according to your Nano Server version. If you have TP5 Nano Server, you will specify both the provider version and package version.
 
+## Installing the provider
 To install the latest version of the provider 1.0.0.0 that works for OS newer than 10.0.14300.1000, use the following steps.
 ```
 Save-Module -Path 'C:\Program Files\WindowsPowerShell\Modules\' -Name NanoServerPackage -RequiredVersion 1.0.0.0
 Import-PackageProvider NanoServerPackage
 ```
-## Installing the provider
-You can install the provider from PowerShellGallery using the following PackageManagement commands:
+To install the TP5 version of the provider 0.1.1.0 that works for TP5 OS version 10.0.14300.1000, use the following steps.
 ```
-Install-PackageProvider NanoServerPackage
+# Your Nano Server OS version is 10.0.14300.1000
+Install-PackageProvider NanoServerPackage -requiredVersion 0.1.1.0
+Import-PackageProvider NanoServerPackage
 ```
 
 There are two sets of cmdlets provided in NanoServerPackage provider. The first set is specific to the provider:
@@ -108,7 +105,7 @@ Find-Package *NPDS* -ProviderName NanoServerPackage -AllVersions -DisplayCulture
 Find-Package *NPDS* -ProviderName NanoServerPackage -AllVersions -DisplayCulture -MinimumVersion 10.0
 ```
 
-## Installing Windows Packages
+## Installing Windows Packages Online or Offline
 You can install a Windows Package using either ```Install-NanoServerPackage``` or ```Install-Package```. If you want to install the package to an offline NanoServer image, you can specify the path to the offline image with ```-ToVhd``` parameter. Otherwise, the cmdlets will install the package to the local machine.
 
 Both cmdlets accept pipeline result from the search cmdlets. Please note that these cmdlets currently do not handle dependencies so you will have to install a package and their dependencies in the correct order. Also, the culture of the package has to match the culture of the machine you are installing it to for the package to work properly. The cmdlets have auto-detection logic that will determine the suitable culture. However, you can also use ```-Culture``` parameter to specify the culture that you want to use for the installation.
@@ -212,25 +209,28 @@ Get-Package -ProviderName NanoServerPackage -FromVhd C:\OfflineVhd.vhd -DisplayC
 ```
 
 ## Version
-0.1.1.0
+1.0.0.0
 
 ## Version History
+#### 1.0.0.0
+Public release for Nano Package Provider that works for WS2016 Nano Server
 #### 0.1.1.0
-Initial public release for Nano Package Providers
+Initial public release for Nano Package Provider that works for TP5 Nano Server
 
 ### Dependencies
 This module has no dependencies
 
 ## Known Issues
-1. This provider does not support PowerShell Direct session.
+This provider does not support PowerShell Direct session.
 
-2. Currently, you cannot install Microsoft-NanoServer-IIS-Package and Microsoft-NanoServer-SCVMM-Package online. There are two workarounds:
+## Fixed issues in v1.0.0.0
+1. In v0.1.1.0, you cannot install Microsoft-NanoServer-IIS-Package and Microsoft-NanoServer-SCVMM-Package online. There are two workarounds:
 
-    i. Install another package that will require reboot such as Microsoft-NanoServer-Storage-Package first and without rebooting, install the required package.
-    
-    ii. Install these packages offline using -ToVhd
+   i. Install another package that will require reboot such as Microsoft-NanoServer-Storage-Package first and without rebooting, install the required package.
+   
+   ii. Install these packages offline using -ToVhd
 
-3. You might see an error as shown below while installing certain packages. This is mainly because this provider does not support discovering and installing dependencies. For these cases, refer to <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a> to identify the dependencies.
+2. In v0.1.1.0, you might see an error as shown below while installing certain packages. This is mainly because this provider does not support discovering and installing dependencies. For these cases, refer to <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a> to identify the dependencies.
 ```
 install-package : Add-WindowsPackage failed. Error code = 0x800f0922
     + CategoryInfo          : InvalidOperation: (System.String[]:String) [Install-Package], Exception
