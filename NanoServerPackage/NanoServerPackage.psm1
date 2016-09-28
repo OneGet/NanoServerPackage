@@ -548,7 +548,7 @@ function Install-NanoServerPackage
                                 Write-Progress -Completed -Activity "Completed"
                             }
                            
-                            $exception = New-Object System.ArgumentException "The package '$name' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current NanoServer has version $vhdNanoServerVersion which is out of this range. Please see https://OneGet.org/NanoServerPackage for instructions." `
+                            $exception = New-Object System.ArgumentException "The package '$name' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current Nano Server has version $vhdNanoServerVersion which is out of this range. Please see https://OneGet.org/NanoServerPackage for instructions." `
                             $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                             $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
