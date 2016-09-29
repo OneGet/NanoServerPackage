@@ -407,12 +407,6 @@ function Install-NanoServerPackage
 
         [parameter()]
         [switch]$Force
-
-<#        [Parameter(ParameterSetName='NameParameterSet')]
-        [ValidateNotNullOrEmpty()]
-        [string[]]
-        $Repository
-#>
     )
 
     Begin
@@ -452,12 +446,11 @@ function Install-NanoServerPackage
         if ($packagesToBeInstalled.Count -eq 0)
         { 
             ThrowError -CallerPSCmdlet $PSCmdlet `
-                -ExceptionName System.Exception `
+                -ExceptionName System.InvalidOperationException  `
                 -ExceptionMessage ("Package '{0}' not found" -f $Name) `
                 -ExceptionObject $packageName `
                 -ErrorId PackageNotFound `
-                -ErrorCategory InvalidData
-            
+                -ErrorCategory InvalidOperation            
         }
 
         $mountDrive = $null
@@ -548,7 +541,7 @@ function Install-NanoServerPackage
                                 Write-Progress -Completed -Activity "Completed"
                             }
                            
-                            $exception = New-Object System.ArgumentException "The package '$name' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current Nano Server has version $vhdNanoServerVersion which is out of this range. Please see https://OneGet.org/NanoServerPackage for instructions." `
+                            $exception = New-Object System.ArgumentException "The package '$name' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current NanoServer has version $vhdNanoServerVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions." `
                             $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                             $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
@@ -597,7 +590,7 @@ function Install-NanoServerPackage
                     if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
                     {
 
-                        $exception = New-Object System.ArgumentException "The package '$($packageToBeInstalled.Name)' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current Nano Server has version $script:systemVersion which is out of this range. Please see https://OneGet.org/NanoServerPackage for instructions." 
+                        $exception = New-Object System.ArgumentException "The package '$($packageToBeInstalled.Name)' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current Nano Server has version $script:systemVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions." 
                         $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
                         $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
 
@@ -653,7 +646,6 @@ function Install-NanoServerPackage
                                                             -successfullyInstalled ([ref]$success) `
                                                             -Force:$Force `
                                                             -PackagesToBeInstalled $packagesToBeInstalled
-#-source $source `
 
                 if (-not $success)
                 {
@@ -2414,7 +2406,6 @@ function Find-Package
         -AllVersions:$AllVersions `
         -Culture $languageChosen `
         -Force:$Force
-#        -Repository $Repository
 
     if ($null -eq $packages)
     {
@@ -2584,7 +2575,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "The package '$name $version' requires $(ConvertNanoServerVersionToString $NanoServerVersion). But the current Nano Server has version $vhdNanoServerVersion which is out of this range. Please see https://OneGet.org/NanoServerPackage for instructions."  `
+                            -ExceptionMessage "The package '$name $version' requires $(ConvertNanoServerVersionToString $NanoServerVersion). But the current Nano Server has version $vhdNanoServerVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions."  `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
@@ -2610,7 +2601,7 @@ function Install-Package
             {
                 ThrowError -CallerPSCmdlet $PSCmdlet `
                             -ExceptionName System.ArgumentException `
-                            -ExceptionMessage "The package '$name' with version $version requires $(ConvertNanoServerVersionToString $NanoServerVersion). But current Nano Server has version $script:systemVersion which is out of this range. Please see https://OneGet.org/NanoServerPackage for instructions." `
+                            -ExceptionMessage "The package '$name' with version $version requires $(ConvertNanoServerVersionToString $NanoServerVersion). But current Nano Server has version $script:systemVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions." `
                             -ExceptionObject $fastPackageReference `
                             -ErrorId FailedToInstall `
                             -ErrorCategory InvalidData
