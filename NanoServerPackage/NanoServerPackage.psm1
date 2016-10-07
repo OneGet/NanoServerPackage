@@ -136,16 +136,6 @@ function Save-NanoServerPackage
         [Version]
         $RequiredVersion,
 
-<#
-        [Parameter(ValueFromPipelineByPropertyName=$true,
-                   ParameterSetName='NameAndPathParameterSet')]
-        [Parameter(ValueFromPipelineByPropertyName=$true,
-                   ParameterSetName='NameAndLiteralPathParameterSet')]
-        [ValidateNotNullOrEmpty()]
-        [string[]]
-        $Repository,
-#>
-
         [Parameter(Mandatory=$true, ParameterSetName='NameAndPathParameterSet')]
         [Parameter(Mandatory=$true, ParameterSetName='InputOjectAndPathParameterSet')]
         [string]
@@ -187,7 +177,6 @@ function Save-NanoServerPackage
         {
             $Name = $InputObject.Name
             $RequiredVersion = $InputObject.Version
-            #$Repository = $InputObject.Repository
             $Culture = $InputObject.Culture
 
             if (-not [string]::IsNullOrWhiteSpace($Culture) -and $Culture.Contains(','))
@@ -198,34 +187,30 @@ function Save-NanoServerPackage
 
         if($Path)
         {
+            $ExceptionObject = $Path
             $destinationPath = Resolve-PathHelper -Path $Path `
-                                                    -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
-
-            if(-not $destinationPath -or -not (Microsoft.PowerShell.Management\Test-path $destinationPath))
-            {
-                $errorMessage = ("Cannot find the path '{0}' because it does not exist" -f $Path)
-                ThrowError  -ExceptionName "System.ArgumentException" `
-                            -ExceptionMessage $errorMessage `
-                            -ErrorId "PathNotFound" `
-                            -CallerPSCmdlet $PSCmdlet `
-                            -ExceptionObject $Path `
-                            -ErrorCategory InvalidArgument
-            }
+                                                  -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
         }
         else
         {
+            $ExceptionObject = $LiteralPath
             $destinationPath = Resolve-PathHelper -Path $LiteralPath `
-                                                    -IsLiteralPath `
-                                                    -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
+                                                  -IsLiteralPath `
+                                                  -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
+        }
 
-            if(-not $destinationPath -or -not (Microsoft.PowerShell.Management\Test-Path -LiteralPath $destinationPath))
-            {
+        if(-not $destinationPath -or -not (Microsoft.PowerShell.Management\Test-Path -LiteralPath $destinationPath))
+        {
+            # When -Force is specified, Path will be created if not available.
+            if($Force -and $destinationPath) {               
+                $null = Microsoft.PowerShell.Management\New-Item -Path $destinationPath -ItemType Directory -Force
+            } else {
                 $errorMessage = ("Cannot find the path '{0}' because it does not exist" -f $LiteralPath)
                 ThrowError  -ExceptionName "System.ArgumentException" `
                             -ExceptionMessage $errorMessage `
                             -ErrorId "PathNotFound" `
                             -CallerPSCmdlet $PSCmdlet `
-                            -ExceptionObject $LiteralPath `
+                            -ExceptionObject $ExceptionObject `
                             -ErrorCategory InvalidArgument
             }
         }
@@ -251,7 +236,6 @@ function Save-NanoServerPackage
                             -RequiredVersion $RequiredVersion `
                             -Culture $Culture `
                             -Force:$Force)
-#                            -Repository $Repository `
 
             if ($findResults.Count -eq 0)
             {
@@ -369,17 +353,6 @@ function Install-NanoServerPackage
         [ValidateNotNullOrEmpty()]
         [System.String[]]$Name,
 
-        <#
-        [Parameter(Mandatory=$true, 
-                   ValueFromPipeline=$true,
-                   ValueFromPipelineByPropertyName=$true,
-                   Position=0,
-                   ParameterSetName='InputObject')]
-        [ValidateNotNull()]
-        [PSCustomObject[]]
-        $InputObject
-        #>
-
         [Parameter(ValueFromPipelineByPropertyName=$true,
                    ParameterSetName='NameParameterSet')]
         [ValidateNotNull()]
@@ -441,7 +414,7 @@ function Install-NanoServerPackage
               
         # do a find first, if there are any errors, don't install
         $packagesToBeInstalled += (Find -Name $Name -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion -RequiredVersion $RequiredVersion `
-            -Culture $Culture -ErrorAction Stop) # -Repository $Repository
+            -Culture $Culture -ErrorAction Stop)
       
         if ($packagesToBeInstalled.Count -eq 0)
         { 
@@ -710,10 +683,6 @@ function Find
         [switch]
         $AllVersions,
 
-        <#[string[]]
-        $Repository,
-        #>
-
         [string]
         $Culture,
 
@@ -726,7 +695,7 @@ function Find
         return $null
     }
 
-    $allSources = Get-Source #$Repository
+    $allSources = Get-Source
 
     $searchResults = @()
 
@@ -1567,12 +1536,9 @@ function Resolve-PathHelper
         }
         catch
         {
-            $errorMessage = ("Cannot find the path '{0}' because it does not exist" -f $currentPath)
-            ThrowError  -ExceptionName "System.InvalidOperationException" `
-                        -ExceptionMessage $errorMessage `
-                        -ErrorId "PathNotFound" `
-                        -CallerPSCmdlet $callerPSCmdlet `
-                        -ErrorCategory InvalidOperation
+            # Caller checks and throws an error if required
+            $resolvedPaths += $currentPath
+            continue
         }
 
         foreach($currentResolvedPath in $currentResolvedPaths)
@@ -2240,155 +2206,6 @@ function Find-Package
         }
     }
 
-    <# Commented out because we are not handling source yet
-    # no source given then search online
-    if ($null -eq $source)
-    {
-    }
-    else
-    {
-        # If name is null or whitespace, interpret as *
-        if ([string]::IsNullOrWhiteSpace($Name))
-        {
-            $Name = "*"
-        }
-
-        if ([System.Management.Automation.WildcardPattern]::ContainsWildcardCharacters($Name))
-        {
-            $wildcardPattern = New-Object System.Management.Automation.WildcardPattern $Name,$script:wildcardOptions
-        }
-
-        # For now, accept offline source like directory
-        if (Test-Path $source)
-        {
-            $count = 0
-            $cabFiles = 0
-            $files = Get-ChildItem $source -File
-
-            # count number of .cab
-            foreach ($file in $files)
-            {
-                if ([System.IO.Path]::GetExtension($file) -eq '.cab')
-                {
-                    $cabFiles += 1
-                }
-            }
-
-            if ($cabFiles -le 0)
-            {
-                return
-            }
-
-            $id = Write-Progress -ParentId 1 -Activity "Finding packages in $source"
-
-            if (-not $id)
-            {
-                $id = 1
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($imagePath))
-            {
-                if (-not ([System.IO.File]::Exists($ImagePath)))
-                {
-                    ThrowError -CallerPSCmdlet $PSCmdlet `
-                        -ExceptionName System.ArgumentException `
-                        -ExceptionMessage "$ImagePath does not exist" `
-                        -ExceptionObject $imagePath `
-                        -ErrorId "InvalidImagePath" `
-                        -ErrorCategory InvalidData
-
-                    return
-                }
-
-                $mountDrive = $null
-
-                # have to mount
-                $mountDrive = New-MountDrive
-        
-                Write-Progress -Activity "Mounting $imagePath to $mountDrive" -PercentComplete 0 -Id $id
-
-                Mount-WindowsImage -ImagePath $imagePath -Index 1 -Path $mountDrive
-
-                try
-                {
-                    foreach ($file in $files)
-                    {
-                        if ([System.IO.Path]::GetExtension($file) -eq '.cab')
-                        {
-                            # scale the percent from 1 to 80 to account for the initial and final step of mounting and dismounting
-                            $percentComplete = (($count*80/$cabFiles) + 10) -as [int]
-                            $count += 1
-
-                            Write-Progress -Activity `
-                                "Getting package information for $($package.PackageName) in $mountDrive" `
-                                -PercentComplete $percentComplete `
-                                -Id $id 
-
-                            $package = Get-WindowsPackage -PackagePath $file.FullName -Path $mountDrive
-
-                            if (Test-PackageWithSearchQuery -fullyQualifiedName $package.PackageName -requiredVersion $RequiredVersion -Name $Name `
-                                -minimumVersion $MinimumVersion -maximumVersion $MaximumVersion -Culture $languageChosen -wildCardPattern $wildcardPattern)
-                            {
-                                Write-Output (New-SoftwareIdentityPackage $package -src $source -InstallLocation $file.FullName)
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    # time to unmount
-                    Write-Progress -Activity "Unmounting image from $mountDrive" -PercentComplete 90 -Id $id    
-                    Remove-MountDrive $mountDrive
-                    Write-Progress -Completed -Id $id -Activity "Completed"
-                }                
-            }
-            else
-            {
-                try
-                {
-                    #online scenario
-                    foreach ($file in $files)
-                    {
-                        # only checks for .cab extension
-                        if ([System.IO.Path]::GetExtension($file) -eq '.cab')
-                        {                            
-                            $percentComplete = ($count*100/$cabFiles) -as [int]
-                            $count += 1
-                                                        
-                            Write-Progress -Activity `
-                                "Getting package information for $($package.PackageName)" `
-                                -PercentComplete $percentComplete `
-                                -Id $id 
-
-                            $package = Get-WindowsPackage -PackagePath $file.FullName -Online
-
-                            if (Test-PackageWithSearchQuery -fullyQualifiedName $package.PackageName -requiredVersion $RequiredVersion -Name $Name `
-                                -minimumVersion $MinimumVersion -maximumVersion $MaximumVersion -Culture $languageChosen -wildCardPattern $wildcardPattern)
-                            {
-                                Write-Output (New-SoftwareIdentityPackage $package -src $source -InstallLocation $file.FullName)
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    Write-Progress -Completed -Id $id -Activity "Completed"
-                }
-            }
-
-        }
-        else
-        {
-            ThrowError -CallerPSCmdlet $PSCmdlet `
-                        -ExceptionName "System.ArgumentException" `
-                        -ExceptionMessage "Source does not point to a valid directory" `
-                        -ErrorId "InvalidSource" `
-                        -ErrorCategory InvalidArgument `
-                        -ExceptionObject $options
-        }
-    }
-    #>
-
     # Let find-windowspackage handle the query
     $convertedRequiredVersion = Convert-Version $requiredVersion
     $convertedMinVersion = Convert-Version $minimumVersion
@@ -2481,7 +2298,6 @@ function Install-Package
 
     $name = $resultArray[0]
     $version = $resultArray[1]
-    #$source = $resultArray[2]
     $Culture = $resultArray[3]
     $Sku = $resultArray[4]
     $NanoServerVersion = $resultArray[5]
@@ -3376,8 +3192,6 @@ function New-SoftwareIdentityPackage
 
     $Culture = $packageNameFractions[3]
     
-    # $details.Add("language", $language)
-
     if (-not [string]::IsNullOrWhiteSpace($packageNameFractions[4]))
     {
         $version = $packageNameFractions[4]

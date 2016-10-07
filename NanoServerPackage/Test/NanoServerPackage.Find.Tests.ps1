@@ -30,9 +30,9 @@ Describe "Find-NanoServerPackage Stand-Alone" {
     It "Find NanoServerPackage Name" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
-        $results += (Find-NanoServerPackage -Name $nameWithWildCards -Verbose)
+        $results += (Find-NanoServerPackage -Name $nameWithWildCards)
         $results.count | should be 1
 
         foreach($result in $results)
@@ -60,7 +60,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $results = @()
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results += (Find-NanoServerPackage -Name $nameWithWildCards -MinimumVersion $minVersion)
         $results.count | should be 1
 
@@ -74,7 +74,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
     It "Find NanoServerPackage Name, Maximum Version" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $nameWithWildCards -MaximumVersion $maxVersion)
         $results.count | should be 1
@@ -89,7 +89,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
     It "Find NanoServerPackage Name, Minimum-Maximum Version" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $nameWithWildCards -MinimumVersion $minVersion -MaximumVersion $maxVersion)
         $results.count | should be 1
@@ -106,7 +106,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $results = @()
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results += (Find-NanoServerPackage -Name $nameWithWildCards -AllVersions)
         $results.count | should be 1
 
@@ -131,7 +131,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
     It "Find NanoServerPackage Name, Required Version" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $nameWithWildCards -RequiredVersion $requiredVersion)
         $results.count | should be 1
@@ -160,7 +160,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $namewithWildCards -Culture $culture)
         $results.count | should be 1
@@ -176,7 +176,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $namewithWildCards -Culture $culture -MinimumVersion $minVersion)
         $results.count | should be 1
@@ -193,7 +193,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $namewithWildCards -Culture $culture -MaximumVersion $maxVersion)
         $results.count | should be 1
@@ -211,7 +211,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
         $results = @()
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results += (Find-NanoServerPackage -Name $namewithWildCards -Culture $culture -MinimumVersion $minVersion -MaximumVersion $maxVersion)
         $results.count | should be 1
 
@@ -228,7 +228,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $namewithWildCards -Culture $culture -AllVersions)
         $results.count | should be 1
@@ -244,7 +244,7 @@ Describe "Find-NanoServerPackage Stand-Alone" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-NanoServerPackage -Name $namewithWildCards -Culture $culture -RequiredVersion $requiredVersion)
         $results.count | should be 1
@@ -289,7 +289,7 @@ Describe "NanoServerPackage OneGet" {
     It "Find NanoServerPackage Name" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $nameWithWildCards)
         $results.count | should be 1
@@ -318,7 +318,7 @@ Describe "NanoServerPackage OneGet" {
         
         $results = @()
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results += (Find-Package -ProviderName NanoServerPackage -Name $nameWithWildCards -MinimumVersion $minVersion)
         $results.count | should be 1
 
@@ -332,7 +332,7 @@ Describe "NanoServerPackage OneGet" {
     It "Find NanoServerPackage Name, Maximum Version" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $nameWithWildCards -MaximumVersion $maxVersion)
         $results.count | should be 1
@@ -347,7 +347,7 @@ Describe "NanoServerPackage OneGet" {
     It "Find NanoServerPackage Name, Minimum-Maximum Version" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $nameWithWildCards -MinimumVersion $minVersion -MaximumVersion $maxVersion)
         $results.count | should be 1
@@ -364,7 +364,7 @@ Describe "NanoServerPackage OneGet" {
         
         $results = @()
         $name = "container"
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results += (Find-Package -ProviderName NanoServerPackage -Name $nameWithWildCards -AllVersions)
         $results.count | should be 1
 
@@ -389,7 +389,7 @@ Describe "NanoServerPackage OneGet" {
     It "Find NanoServerPackage Name, Required Version" {
         
         $name = $names | Get-Random
-        $nameWithWildCards = "*" + $name + "*"
+        $nameWithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $nameWithWildCards -RequiredVersion $requiredVersion)
         $results.count | should be 1
@@ -418,7 +418,7 @@ Describe "NanoServerPackage OneGet" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $namewithWildCards -Culture $culture)
         $results.count | should be 1
@@ -434,7 +434,7 @@ Describe "NanoServerPackage OneGet" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $namewithWildCards -Culture $culture -MinimumVersion $minVersion)
         $results.count | should be 1
@@ -452,7 +452,7 @@ Describe "NanoServerPackage OneGet" {
         $culture = $cultures | Get-Random
         $results = @()
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results += (Find-Package -ProviderName NanoServerPackage -Name $namewithWildCards -Culture $culture -MaximumVersion $maxVersion)
         $results.count | should be 1
 
@@ -469,7 +469,7 @@ Describe "NanoServerPackage OneGet" {
         $culture = $cultures | Get-Random
         $results = @()
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results += (Find-Package -ProviderName NanoServerPackage -Name $namewithWildCards -Culture $culture -MinimumVersion $minVersion -MaximumVersion $maxVersion)
         $results.count | should be 1
 
@@ -486,7 +486,7 @@ Describe "NanoServerPackage OneGet" {
         
         $culture = $cultures | Get-Random
         $name = "containers"
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $namewithWildCards -Culture $culture -AllVersions)
         $results.count | should be 1
@@ -502,7 +502,7 @@ Describe "NanoServerPackage OneGet" {
         
         $culture = $cultures | Get-Random
         $name = $names | Get-Random
-        $namewithWildCards = "*" + $name + "*"
+        $namewithWildCards = "*$name*"
         $results = @()
         $results += (Find-Package -ProviderName NanoServerPackage -Name $namewithWildCards -Culture $culture -RequiredVersion $requiredVersion)
         $results.count | should be 1
