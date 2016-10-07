@@ -61,24 +61,21 @@ Describe "Save-WindowsPackage Stand-Alone" {
 
     It "Save-NanoServerPackage Name, Path, Force" {
         $name = $names | Get-Random
-        $version = $requiredVersion
 
         $SavePath = "$TestDrive\SaveFolder"
+        (Test-Path $SavePath) | should be $false
 
         $results = @()
         $results += (Save-NanoServerPackage -Name $name -Path $SavePath -Force)
 
         $results.count | should be 1
         $results[0].name | should be $name
-        $results[0].version | should be $version
-        $results[0].culture | should be "en-us"
 
         $outputs = Get-ChildItem $SavePath -Name *.cab
 
         foreach($output in $outputs)
         {
             $output | should match $name
-            $output | should match $version
         }
 
         Remove-Item $SavePath -Recurse -Force
