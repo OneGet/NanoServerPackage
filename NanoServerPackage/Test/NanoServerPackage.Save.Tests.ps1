@@ -30,7 +30,7 @@ Describe "Save-WindowsPackage Stand-Alone" {
     AfterAll {
         if(Test-Path $pathToSave)
         {
-            rmdir $pathToSave -Force
+            rmdir $pathToSave -Force -Recurse
         }
 
         "Finished running the Find-NanoServerPackage Stand-Alone tests"        
@@ -57,6 +57,28 @@ Describe "Save-WindowsPackage Stand-Alone" {
         }
 
         Remove-Item $pathToSave\*.cab
+    }
+
+    It "Save-NanoServerPackage Name, Path, Force" {
+        $name = $names | Get-Random
+
+        $SavePath = "$TestDrive\SaveFolder"
+        (Test-Path $SavePath) | should be $false
+
+        $results = @()
+        $results += (Save-NanoServerPackage -Name $name -Path $SavePath -Force)
+
+        $results.count | should be 1
+        $results[0].name | should be $name
+
+        $outputs = Get-ChildItem $SavePath -Name *.cab
+
+        foreach($output in $outputs)
+        {
+            $output | should match $name
+        }
+
+        Remove-Item $SavePath -Recurse -Force
     }
 
     It "Save-NanoServerPackage Name, Path, Culture" {
