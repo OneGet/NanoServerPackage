@@ -1,6 +1,6 @@
 ﻿@{
   RootModule = 'NanoServerPackage.psm1'
-	ModuleVersion = '0.1.1.0'
+	ModuleVersion = '1.0.1.0'
 	GUID = '25831220-0a16-4f2e-9b66-864a4252c857'
 	Author = 'Microsoft Corporation'
   Description = 'A PackageManagement provider to  Discover, Save and Install Nano Server Packages on-demand'
