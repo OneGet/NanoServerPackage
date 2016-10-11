@@ -1,11 +1,11 @@
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$sut = (Split-Path -Leaf $MyInvocation.MyCommand.Path).Replace(".Save.Tests.ps1", ".psm1")
-. "$here\..\$sut"
+#$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+#$sut = (Split-Path -Leaf $MyInvocation.MyCommand.Path).Replace(".Save.Tests.ps1", ".psm1")
+#. "$here\..\$sut"
 $minVersion = "10.0.14300.1000"
-$maxVersion = "10.0.14300.1000"
-$requiredVersion = "10.0.14300.1000"
+$maxVersion = "10.0.14393.1000"
+$requiredVersion = "10.0.14393.0"
 
-Describe “Save-WindowsPackage Stand-Alone" {
+Describe "Save-WindowsPackage Stand-Alone" {
 
     BeforeAll {
 
@@ -30,7 +30,7 @@ Describe “Save-WindowsPackage Stand-Alone" {
     AfterAll {
         if(Test-Path $pathToSave)
         {
-            rmdir $pathToSave -Force
+            rmdir $pathToSave -Force -Recurse
         }
 
         "Finished running the Find-NanoServerPackage Stand-Alone tests"        
@@ -38,7 +38,7 @@ Describe “Save-WindowsPackage Stand-Alone" {
 
     It "Save-NanoServerPackage Name, Path" {
         $name = $names | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
         $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards)
@@ -59,10 +59,32 @@ Describe “Save-WindowsPackage Stand-Alone" {
         Remove-Item $pathToSave\*.cab
     }
 
+    It "Save-NanoServerPackage Name, Path, Force" {
+        $name = $names | Get-Random
+
+        $SavePath = "$TestDrive\SaveFolder"
+        (Test-Path $SavePath) | should be $false
+
+        $results = @()
+        $results += (Save-NanoServerPackage -Name $name -Path $SavePath -Force)
+
+        $results.count | should be 1
+        $results[0].name | should be $name
+
+        $outputs = Get-ChildItem $SavePath -Name *.cab
+
+        foreach($output in $outputs)
+        {
+            $output | should match $name
+        }
+
+        Remove-Item $SavePath -Recurse -Force
+    }
+
     It "Save-NanoServerPackage Name, Path, Culture" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
         
         $results = @()
         $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture)
@@ -86,7 +108,7 @@ Describe “Save-WindowsPackage Stand-Alone" {
     It "Save-NanoServerPackage Name, Path, Culture, Minimum Version" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
         $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -MinimumVersion $minVersion)
@@ -110,7 +132,7 @@ Describe “Save-WindowsPackage Stand-Alone" {
     It "Save-NanoServerPackage Name, Path, Culture, Maximum Version" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
         $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -MaximumVersion $maxVersion)
@@ -134,7 +156,7 @@ Describe “Save-WindowsPackage Stand-Alone" {
     It "Save-NanoServerPackage Name, Path, Culture, Required Version" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
         $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -RequiredVersion $requiredVersion)
@@ -159,7 +181,7 @@ Describe “Save-WindowsPackage Stand-Alone" {
         try {
             $name = "Microsoft-NanoServer-SCVMM-Compute-Package"
             $culture = $cultures | Get-Random
-            $version = "10.0.14300.1000"
+            $version = $requiredVersion
 
             $results = @()
             $results += (Save-NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -RequiredVersion $requiredVersion -Force)
@@ -179,11 +201,10 @@ Describe “Save-WindowsPackage Stand-Alone" {
 
 }
 
-Describe “Save-NanoServerPackage One-Get" {
+Describe "Save-NanoServerPackage One-Get" {
 
     BeforeAll {
     
-        $pathToSaveWithWildCards = "$env:LOCALAPPDATA\W*DOws*Pr*der\Save\"
         $pathToSave = "$env:LOCALAPPDATA\NanoServerPackageProvider\Save\"
         $badPath = "C:\DoesNotExist"
         $cultures = ("cs-cz", "de-de", "en-us", "es-es", "fr-fr", "hu-hu", "it-it", "ja-jp", "ko-kr", "nl-nl", "pl-pl", "pt-br", "pt-pt", "ru-ru", "sv-se", "tr-tr", "zh-cn", "zh-tw")        
@@ -212,10 +233,10 @@ Describe “Save-NanoServerPackage One-Get" {
 
     It "Save-NanoServerPackage Name, Path" {
         $name = $names | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
-        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSaveWithWildCards)
+        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSave)
 
         $results.count | should be 1
         $results[0].name | should be $name
@@ -236,10 +257,10 @@ Describe “Save-NanoServerPackage One-Get" {
     It "Save-NanoServerPackage Name, Path, Culture" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
         
         $results = @()
-        $results += (Save-Package -ProviderName NanoServerPackage $name -Path $pathToSaveWithWildCards -Culture $culture)
+        $results += (Save-Package -ProviderName NanoServerPackage $name -Path $pathToSave -Culture $culture)
 
         $results.count | should be 1
         $results[0].name | should be $name
@@ -260,10 +281,10 @@ Describe “Save-NanoServerPackage One-Get" {
     It "Save-NanoServerPackage Name, Path, Culture, Minimum Version" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
-        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -MinimumVersion $minVersion)
+        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSave -Culture $culture -MinimumVersion $minVersion)
 
         $results.count | should be 1
         $results[0].name | should be $name
@@ -284,10 +305,10 @@ Describe “Save-NanoServerPackage One-Get" {
     It "Save-NanoServerPackage Name, Path, Culture, Maximum Version" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
-        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -MaximumVersion $maxVersion)
+        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSave -Culture $culture -MaximumVersion $maxVersion)
 
         $results.count | should be 1
         $results[0].name | should be $name
@@ -308,10 +329,10 @@ Describe “Save-NanoServerPackage One-Get" {
     It "Save-NanoServerPackage Name, Path, Culture, Required Version" {
         $name = $names | Get-Random
         $culture = $cultures | Get-Random
-        $version = "10.0.14300.1000"
+        $version = $requiredVersion
 
         $results = @()
-        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -RequiredVersion $requiredVersion)
+        $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSave -Culture $culture -RequiredVersion $requiredVersion)
 
         $results.count | should be 1
         $results[0].name | should be $name
@@ -333,10 +354,10 @@ Describe “Save-NanoServerPackage One-Get" {
         try {
             $name = "Microsoft-NanoServer-SCVMM-Compute-Package"
             $culture = $cultures | Get-Random
-            $version = "10.0.14300.1000"
+            $version = $requiredVersion
 
             $results = @()
-            $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSaveWithWildCards -Culture $culture -RequiredVersion $requiredVersion -Force)
+            $results += (Save-Package -ProviderName NanoServerPackage -Name $name -Path $pathToSave -Culture $culture -RequiredVersion $requiredVersion -Force)
 
             $results.count | should be 3
             $results.name -contains $name | should be $true

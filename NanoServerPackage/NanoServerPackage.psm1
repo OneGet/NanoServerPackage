@@ -15,9 +15,11 @@ $script:downloadedCabLocation = "$script:WindowsPackage\DownloadedCabs"
 $script:file_modules = "$script:WindowsPackage\sources.txt"
 $script:windowsPackageSources = $null
 $script:defaultPackageName = "NanoServerPackageSource"
-$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=730617&clcid=0x409"
+$script:defaultPackageLocation = "http://go.microsoft.com/fwlink/?LinkID=723027&clcid=0x409"
 $script:isNanoServerInitialized = $false
 $script:isNanoServer = $false
+$script:systemSKU = -1
+$script:systemVersion = $null
 $script:availablePackages = @()
 $separator = "|#|"
 
@@ -46,16 +48,10 @@ function Find-NanoServerPackage
         $RequiredVersion,
 
         [switch]
-        $AllVersions,
-        
-#        [string[]]
-#        $Repository,
+        $AllVersions,        
 
         [string]
-        $Culture,
-
-        [switch]
-        $Force
+        $Culture
     )
     
     $PSBoundParameters["Provider"] = $script:providerName
@@ -64,6 +60,15 @@ function Find-NanoServerPackage
 
     foreach($package in $packages) {
         Microsoft.PowerShell.Utility\Add-Member -InputObject $package -MemberType NoteProperty -Name "Description" -Value $package.Summary
+        
+        try {
+            if ($package.Metadata["NanoServerVersion"] -ne $null)
+            {
+                Microsoft.PowerShell.Utility\Add-Member -InputObject $package -MemberType NoteProperty -Name "NanoServerVersion" -Value (ConvertNanoServerVersionToString $package.Metadata["NanoServerVersion"][0])
+            }
+        }
+        catch {}
+
         $package.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo") | Out-Null
         $package
     }
@@ -131,16 +136,6 @@ function Save-NanoServerPackage
         [Version]
         $RequiredVersion,
 
-<#
-        [Parameter(ValueFromPipelineByPropertyName=$true,
-                   ParameterSetName='NameAndPathParameterSet')]
-        [Parameter(ValueFromPipelineByPropertyName=$true,
-                   ParameterSetName='NameAndLiteralPathParameterSet')]
-        [ValidateNotNullOrEmpty()]
-        [string[]]
-        $Repository,
-#>
-
         [Parameter(Mandatory=$true, ParameterSetName='NameAndPathParameterSet')]
         [Parameter(Mandatory=$true, ParameterSetName='InputOjectAndPathParameterSet')]
         [string]
@@ -182,7 +177,6 @@ function Save-NanoServerPackage
         {
             $Name = $InputObject.Name
             $RequiredVersion = $InputObject.Version
-            #$Repository = $InputObject.Repository
             $Culture = $InputObject.Culture
 
             if (-not [string]::IsNullOrWhiteSpace($Culture) -and $Culture.Contains(','))
@@ -193,34 +187,30 @@ function Save-NanoServerPackage
 
         if($Path)
         {
+            $ExceptionObject = $Path
             $destinationPath = Resolve-PathHelper -Path $Path `
-                                                    -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
-
-            if(-not $destinationPath -or -not (Microsoft.PowerShell.Management\Test-path $destinationPath))
-            {
-                $errorMessage = ("Cannot find the path '{0}' because it does not exist" -f $Path)
-                ThrowError  -ExceptionName "System.ArgumentException" `
-                            -ExceptionMessage $errorMessage `
-                            -ErrorId "PathNotFound" `
-                            -CallerPSCmdlet $PSCmdlet `
-                            -ExceptionObject $Path `
-                            -ErrorCategory InvalidArgument
-            }
+                                                  -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
         }
         else
         {
+            $ExceptionObject = $LiteralPath
             $destinationPath = Resolve-PathHelper -Path $LiteralPath `
-                                                    -IsLiteralPath `
-                                                    -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
+                                                  -IsLiteralPath `
+                                                  -CallerPSCmdlet $PSCmdlet | Microsoft.PowerShell.Utility\Select-Object -First 1
+        }
 
-            if(-not $destinationPath -or -not (Microsoft.PowerShell.Management\Test-Path -LiteralPath $destinationPath))
-            {
+        if(-not $destinationPath -or -not (Microsoft.PowerShell.Management\Test-Path -LiteralPath $destinationPath))
+        {
+            # When -Force is specified, Path will be created if not available.
+            if($Force -and $destinationPath) {               
+                $null = Microsoft.PowerShell.Management\New-Item -Path $destinationPath -ItemType Directory -Force
+            } else {
                 $errorMessage = ("Cannot find the path '{0}' because it does not exist" -f $LiteralPath)
                 ThrowError  -ExceptionName "System.ArgumentException" `
                             -ExceptionMessage $errorMessage `
                             -ErrorId "PathNotFound" `
                             -CallerPSCmdlet $PSCmdlet `
-                            -ExceptionObject $LiteralPath `
+                            -ExceptionObject $ExceptionObject `
                             -ErrorCategory InvalidArgument
             }
         }
@@ -246,7 +236,6 @@ function Save-NanoServerPackage
                             -RequiredVersion $RequiredVersion `
                             -Culture $Culture `
                             -Force:$Force)
-#                            -Repository $Repository `
 
             if ($findResults.Count -eq 0)
             {
@@ -364,17 +353,6 @@ function Install-NanoServerPackage
         [ValidateNotNullOrEmpty()]
         [System.String[]]$Name,
 
-        <#
-        [Parameter(Mandatory=$true, 
-                   ValueFromPipeline=$true,
-                   ValueFromPipelineByPropertyName=$true,
-                   Position=0,
-                   ParameterSetName='InputObject')]
-        [ValidateNotNull()]
-        [PSCustomObject[]]
-        $InputObject
-        #>
-
         [Parameter(ValueFromPipelineByPropertyName=$true,
                    ParameterSetName='NameParameterSet')]
         [ValidateNotNull()]
@@ -401,16 +379,7 @@ function Install-NanoServerPackage
         [System.String]$ToVhd,
 
         [parameter()]
-        [switch]$Force,
-
-        [parameter()]
-        [switch]$NoRestart
-
-<#        [Parameter(ParameterSetName='NameParameterSet')]
-        [ValidateNotNullOrEmpty()]
-        [string[]]
-        $Repository
-#>
+        [switch]$Force
     )
 
     Begin
@@ -442,14 +411,19 @@ function Install-NanoServerPackage
         }
 
         $packagesToBeInstalled = @()
-
+              
         # do a find first, if there are any errors, don't install
         $packagesToBeInstalled += (Find -Name $Name -MinimumVersion $MinimumVersion -MaximumVersion $MaximumVersion -RequiredVersion $RequiredVersion `
-            -Culture $Culture -ErrorAction Stop) # -Repository $Repository
-
+            -Culture $Culture -ErrorAction Stop)
+      
         if ($packagesToBeInstalled.Count -eq 0)
-        {
-            return
+        { 
+            ThrowError -CallerPSCmdlet $PSCmdlet `
+                -ExceptionName System.InvalidOperationException  `
+                -ExceptionMessage ("Package '{0}' not found" -f $Name) `
+                -ExceptionObject $packageName `
+                -ErrorId PackageNotFound `
+                -ErrorCategory InvalidOperation            
         }
 
         $mountDrive = $null
@@ -461,25 +435,142 @@ function Install-NanoServerPackage
 
         if (-not [string]::IsNullOrWhiteSpace($ToVhd))
         {
-            $ToVhd = Resolve-PathHelper $ToVhd -callerPSCmdlet $PSCmdlet
-            
-            if (-not ([System.IO.File]::Exists($ToVhd)))
+            if($PSCmdlet.ShouldProcess($ToVhd, "Mount-WindowsImage"))
             {
-                $exception = New-Object System.ArgumentException "$ToVhd does not exist"
-                $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidArgument
-                $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "InvalidVhdPath", $errorCategory, $ToVhd
+                $ToVhd = Resolve-PathHelper $ToVhd -callerPSCmdlet $PSCmdlet
+            
+                if (-not ([System.IO.File]::Exists($ToVhd)))
+                {
+                    $exception = New-Object System.ArgumentException "$ToVhd does not exist"
+                    $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidArgument
+                    $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "InvalidVhdPath", $errorCategory, $ToVhd
 
-                $PSCmdlet.ThrowTerminatingError($errorRecord)
+                    $PSCmdlet.ThrowTerminatingError($errorRecord)
+                }
+
+                # mount image
+                $mountDrive = New-MountDrive
+
+                Write-Verbose "Mounting $ToVhd to $mountDrive"
+
+                Write-Progress -Activity "Mounting $ToVhd to $mountDrive" -PercentComplete 0
+
+                $null = Mount-WindowsImage -ImagePath $ToVhd -Index 1 -Path $mountDrive
+
+                $mountedVHDEdition = $null
+
+                foreach ($packageToBeInstalled in $packagesToBeInstalled)
+                {
+                    # if this package can't be install on standard, should do a check
+                    if (-not $packageToBeInstalled.Sku.Contains("144") -or (-not [string]::IsNullOrWhiteSpace($packageToBeInstalled.NanoServerVersion)))
+                    {
+                        # initialize the regkey
+                        if ($mountedVHDEdition -eq $null)
+                        {
+                            $regKey = $null
+
+                            $vhdNanoServerVersion = $null
+                            $mountedVHDEdition = "ERROR"
+
+                            try
+                            {
+                                reg load HKLM\NANOSERVERPACKAGEVHDSYS "$mountDrive\Windows\System32\config\SOFTWARE" | Out-Null
+                                $regKey = dir 'HKLM:\NANOSERVERPACKAGEVHDSYS\Microsoft\Windows NT'
+                                $mountedVHDEdition = $regKey.GetValue("EditionID")
+                                $majorVersion = $regKey.GetValue("CurrentMajorVersionNumber")
+                                $minorVersion = $regKey.GetValue("CurrentMinorVersionNumber")
+                                $buildVersion = $regKey.GetValue("CurrentBuildNumber")
+                                $vhdNanoServerVersion = [version]::new($majorVersion, $minorVersion, $buildVersion, 0)
+                            }
+                            catch
+                            {
+                                # ERROR
+                                $mountedVHDEdition = "ERROR"
+                                $vhdNanoServerVersion = $null
+                            }
+                            finally
+                            {
+                                try
+                                {
+                                    if ($regKey -ne $null)
+                                    {
+                                        $regKey.Handle.Close()
+                                        [gc]::Collect()
+                                        reg unload HKLM\NANOSERVERPACKAGEVHDSYS | Out-Null
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        if (-not [string]::IsNullOrWhiteSpace($packageToBeInstalled.NanoServerVersion) -and -not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $vhdNanoServerVersion))
+                        {
+                            # unmount the drive
+                            if ($null -ne $mountDrive)
+                            {
+                                Write-Progress -Activity "Unmounting mount drive $mountDrive" -PercentComplete 90
+                                Write-Verbose "Unmounting mount drive $mountDrive"
+                                Remove-MountDrive $mountDrive -discard $true
+                                Write-Progress -Completed -Activity "Completed"
+                            }
+                           
+                            $exception = New-Object System.ArgumentException "The package '$name' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current Nano Server has version $vhdNanoServerVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions." `
+                            $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                            $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
+
+                            $PSCmdlet.ThrowTerminatingError($errorRecord)                    
+                        }
+
+                        if (-not $packageToBeInstalled.Sku.Contains("144") -and $mountedVHDEdition -eq "ServerStandardNano")
+                        {
+                            # unmount the drive
+                            if ($null -ne $mountDrive)
+                            {
+                                Write-Progress -Activity "Unmounting mount drive $mountDrive" -PercentComplete 90
+                                Write-Verbose "Unmounting mount drive $mountDrive"
+                                Remove-MountDrive $mountDrive -discard $true
+                                Write-Progress -Completed -Activity "Completed"
+                            }
+
+                            $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) cannot be installed on this edition of NanoServer"
+                            $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                            $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
+
+                            $PSCmdlet.ThrowTerminatingError($errorRecord)                    
+                        }
+                    }
+                }
             }
+        }
+        else
+        {
+            foreach ($packageToBeInstalled in $packagesToBeInstalled)
+            {
+                # this package can't be installed on standard
+                if (IsNanoServer)
+                {
+                    # if this is a nano, then systemSKU would be populated after isnanoserver call
+                    if (-not $packageToBeInstalled.Sku.Contains($script:systemSKU.ToString()))
+                    {
+                        $exception = New-Object System.ArgumentException "$($packageToBeInstalled.Name) cannot be installed on this edition of NanoServer"
+                        $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                        $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerEdition", $errorCategory, $packageToBeInstalled.Name
 
-            # mount image
-            $mountDrive = New-MountDrive
+                        $PSCmdlet.ThrowTerminatingError($errorRecord)                    
+                    }
 
-            Write-Verbose "Mounting $ToVhd to $mountDrive"
+                    # if this is nanoserver, then we should also have the version populated
+                    if (-not (NanoServerVersionMatched -dependencyVersionString $packageToBeInstalled.NanoServerVersion -version $script:systemVersion))
+                    {
 
-            Write-Progress -Activity "Mounting $ToVhd to $mountDrive" -PercentComplete 0
+                        $exception = New-Object System.ArgumentException "The package '$($packageToBeInstalled.Name)' with version $($packageToBeInstalled.Version) requires $(ConvertNanoServerVersionToString $packageToBeInstalled.NanoServerVersion). But the current Nano Server has version $script:systemVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions." 
+                        $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidData
+                        $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, "WrongNanoServerVersion", $errorCategory, $packageToBeInstalled.Name
 
-            $null = Mount-WindowsImage -ImagePath $ToVhd -Index 1 -Path $mountDrive
+                        $PSCmdlet.ThrowTerminatingError($errorRecord)
+                    }
+                }
+            }
         }
 
         $discard = $false
@@ -498,9 +589,12 @@ function Install-NanoServerPackage
                 }
                 else
                 {
-                    Write-Progress -Activity "Getting available packages on $mountDrive" -PercentComplete 10
+                    if($PSCmdlet.ShouldProcess($mountDrive, "Get-WindowsPackage"))
+                    {
+                        Write-Progress -Activity "Getting available packages on $mountDrive" -PercentComplete 10
 
-                    $availablePackages = (Get-WindowsPackage -Path $mountDrive).PackageName.ToLower()
+                        $availablePackages = (Get-WindowsPackage -Path $mountDrive).PackageName.ToLower()
+                    }
                 }
             }
 
@@ -524,9 +618,7 @@ function Install-NanoServerPackage
                                                             -availablePackages $availablePackages `
                                                             -successfullyInstalled ([ref]$success) `
                                                             -Force:$Force `
-                                                            -NoRestart:$NoRestart `
                                                             -PackagesToBeInstalled $packagesToBeInstalled
-#-source $source `
 
                 if (-not $success)
                 {
@@ -591,10 +683,6 @@ function Find
         [switch]
         $AllVersions,
 
-        <#[string[]]
-        $Repository,
-        #>
-
         [string]
         $Culture,
 
@@ -607,7 +695,7 @@ function Find
         return $null
     }
 
-    $allSources = Get-Source #$Repository
+    $allSources = Get-Source
 
     $searchResults = @()
 
@@ -715,6 +803,7 @@ function Find-Azure
             $obj | Add-Member NoteProperty Version $searchStuffEntry.Version
             $obj | Add-Member NoteProperty Description $searchStuffEntry.Description
             $obj | Add-Member NoteProperty SKU $searchStuffEntry.Sku
+            $obj | Add-Member NoteProperty NanoServerVersion $searchStuffEntry.NanoServerVersion
 
             $languageObj = New-Object PSObject
             $languageDictionary = $searchStuffEntry.Language
@@ -902,6 +991,7 @@ function Find-Azure
         $props= Get-Member -InputObject $langDict -MemberType NoteProperty
         $theSource = $Repository.Name
         $sku = [string]::Join(";", @($searchEntry.Sku))
+        $nanoServerVersion = $searchEntry.NanoServerVersion
 
         $dependencies = @()
         $dependenciesProperty = Get-Member -InputObject $searchEntry -MemberType NoteProperty -Name Dependencies
@@ -936,6 +1026,7 @@ function Find-Azure
                 Culture = $Culture
                 Sku = $sku
                 Dependencies = $dependencies
+                NanoServerVersion = $NanoServerVersion
             })
             $ResultEntry.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo")
             $searchLanguageResults += $ResultEntry
@@ -964,6 +1055,7 @@ function Find-Azure
                 Culture = $langListString
                 Sku = $sku
                 Dependencies = $dependencies
+                NanoServerVersion = $NanoServerVersion
             })
             $ResultEntry.PSTypeNames.Insert(0, "Microsoft.PowerShell.Commands.NanoServerPackageItemInfo")
             $searchLanguageResults += $ResultEntry
@@ -1025,7 +1117,6 @@ function Install-PackageHelper
         [version][Alias('Version')]$RequiredVersion,
         [string[]]$availablePackages,
         [switch]$Force,
-        [switch]$NoRestart,
         [PSCustomObject[]]$PackagesToBeInstalled
     )
 
@@ -1158,22 +1249,31 @@ function Install-PackageHelper
         }
 
         $savedCabFilesToInstall = @()
+        $savedCabFilesToInstallTuple = @()
 
         foreach ($savedPackage in $savedPackages)
         {
-            # proceed with installation
             $basePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture "" -version $savedPackage.Version))
+
+            $basePackagePath = ""
 
             if (Test-Path $basePackageFile) {
                 $savedCabFilesToInstall += $basePackageFile
+                $basePackagePath = $basePackageFile
             }
 
+            # proceed with installation, 
             $languagePackageFile = (Join-Path $destinationFolder (Get-FileName -name $savedPackage.Name -Culture $Culture -version $savedPackage.Version))
+
+            $langPackagePath = ""
 
             if (Test-Path $languagePackageFile) {
                 $savedCabFilesToInstall += $languagePackageFile
                 $installedWindowsPackages += $savedPackage
+                $langPackagePath = $languagePackageFile
             }
+
+            $savedCabFilesToInstallTuple += ([System.Tuple]::Create($basePackagePath, $langPackagePath))
         }
 
         $restartNeeded = $false
@@ -1189,10 +1289,10 @@ function Install-PackageHelper
             }
             else
             {
-                Write-Verbose "Installing cab files $savedCabFilesToInstall"                
-                $successfullyInstalled.Value = Install-Online $savedCabFilesToInstall -restartNeeded ([ref]$restartNeeded)
+                Write-Verbose "Installing cab files $savedCabFilesToInstallTuple"                
+                $successfullyInstalled.Value = Install-Online $savedCabFilesToInstallTuple -restartNeeded ([ref]$restartNeeded)
 
-                if ($restartNeeded -and (-not $NoRestart))
+                if ($restartNeeded)
                 {
                     Write-Warning "Restart is needed to complete installation"
                 }
@@ -1227,6 +1327,9 @@ function Install-PackageHelper
 ### Look into the win32 operating system class
 ### Returns True if running on Nano 
 ### False otherwise
+### 144: Server Standard
+### 143: Server Datacenter
+### 109: Test Images
 ###
 function IsNanoServer
 {
@@ -1238,7 +1341,8 @@ function IsNanoServer
     {
         $script:isNanoServerInitialized = $true
         $operatingSystem = Get-CimInstance -ClassName win32_operatingsystem
-        $systemSKU = $operatingSystem.OperatingSystemSKU
+        $script:systemSKU = $operatingSystem.OperatingSystemSKU
+        $script:systemVersion = [System.Environment]::OSVersion.Version
         $script:isNanoServer = ($systemSKU -eq 109) -or ($systemSKU -eq 144) -or ($systemSKU -eq 143)
         return $script:isNanoServer
     }
@@ -1432,12 +1536,9 @@ function Resolve-PathHelper
         }
         catch
         {
-            $errorMessage = ("Cannot find the path '{0}' because it does not exist" -f $currentPath)
-            ThrowError  -ExceptionName "System.InvalidOperationException" `
-                        -ExceptionMessage $errorMessage `
-                        -ErrorId "PathNotFound" `
-                        -CallerPSCmdlet $callerPSCmdlet `
-                        -ErrorCategory InvalidOperation
+            # Caller checks and throws an error if required
+            $resolvedPaths += $currentPath
+            continue
         }
 
         foreach($currentResolvedPath in $currentResolvedPaths)
@@ -1534,6 +1635,225 @@ function DepthFirstVisit(
     $temporarilyMarked.Remove($hash) | Out-Null
 
     return $true
+}
+
+<#
+Parse and return a dependency version
+The version string is either a simple version or an arithmetic range
+e.g.
+     1.0         --> 1.0 ≤ x
+     (,1.0]      --> x ≤ 1.0
+     (,1.0)      --> x lt 1.0
+     [1.0]       --> x == 1.0
+     (1.0,)      --> 1.0 lt x
+     (1.0, 2.0)   --> 1.0 lt x lt 2.0
+     [1.0, 2.0]   --> 1.0 ≤ x ≤ 2.0
+ 
+#>
+function NanoServerVersionMatched([string]$dependencyVersionString, [version]$version)
+{
+    if ([string]::IsNullOrWhiteSpace($dependencyVersionString) -or $version -eq $null)
+    {
+        return $true
+    }
+
+    $dependencyVersionString = $dependencyVersionString.Trim()
+
+    $first = $dependencyVersionString[0]
+    $last = $dependencyVersionString[-1]
+    
+    if ($first -ne '(' -and $first -ne '[' -and $last -ne ']' -and $last -ne ')')
+    {
+        # stand alone so it is min inclusive
+        $versionToBeCompared = Convert-Version $dependencyVersionString
+
+        return ($versionToBeCompared -ge $version)        
+    }
+
+    # now dep version string must have length > 3
+    if ($dependencyVersionString.Length -lt 3)
+    {
+        return $true
+    }
+
+    if ($first -ne '(' -and $first -ne '[')
+    {
+        # first character must be either ( or [
+        return $true
+    }
+
+    if ($last -ne ']' -and $last -ne ')')
+    {
+        # last character must be either ] or )
+        return $true
+    }
+
+    # inclusive if the first or last is [ or ], otherwise exclusive
+    $minInclusive = ($first -eq '[')
+    $maxInclusive = ($last -eq ']')
+
+    $dependencyVersionString = $dependencyVersionString.Substring(1, $dependencyVersionString.Length - 2)
+
+    $parts = $dependencyVersionString.Split(',')
+    
+    if ($parts.Length -gt 2)
+    {
+        return $true
+    }
+
+    $minVersion = Convert-Version $parts[0]
+
+    if ($parts.Length -eq 1)
+    {
+        $maxVersion = $minVersion
+    }
+    else
+    {
+        $maxVersion = Convert-Version $parts[1]
+    }
+
+    if ($minVersion -eq $null -and $maxVersion -eq $null)
+    {
+        return $true
+    }
+
+    # now we can compare
+    if ($minVersion -ne $null)
+    {
+        if ($minInclusive)
+        {
+            # min inclusive so version must be >= minversion
+            if ($version -lt $minVersion)
+            {
+                return $false
+            }
+        }
+        else
+        {
+            # not mininclusive so version must be > minversion
+            if ($version -le $minVersion)
+            {
+                return $false
+            }
+        }
+    }
+
+    if ($maxVersion -ne $null)
+    {
+        if ($maxInclusive)
+        {
+            if ($version -gt $maxVersion)
+            {
+                return $false
+            }
+        }
+        else
+        {
+            if ($version -ge $maxVersion)
+            {
+                return $false
+            }
+        }
+    }
+
+    return $true
+}
+
+function ConvertNanoServerVersionToString([string]$NanoServerVersion)
+{
+    $result = $NanoServerVersion
+
+    if ([string]::IsNullOrWhiteSpace($NanoServerVersion))
+    {
+        return $result
+    }
+
+    $NanoServerVersion = $NanoServerVersion.Trim()
+
+    $first = $NanoServerVersion[0]
+    $last = $NanoServerVersion[-1]
+    
+    if ($first -ne '(' -and $first -ne '[' -and $last -ne ']' -and $last -ne ')')
+    {
+        return "minimum NanoServer version of $NanoServerVersion (inclusive)"
+    }
+
+    # now dep version string must have length > 3
+    if ($NanoServerVersion.Length -lt 3)
+    {
+        return $NanoServerVersion
+    }
+
+    if ($first -ne '(' -and $first -ne '[')
+    {
+        # first character must be either ( or [
+        return $NanoServerVersion
+    }
+
+    if ($last -ne ']' -and $last -ne ')')
+    {
+        # last character must be either ] or )
+        return $NanoServerVersion
+    }
+
+    # inclusive if the first or last is [ or ], otherwise exclusive
+    $minInclusive = ($first -eq '[')
+    $maxInclusive = ($last -eq ']')
+
+    $NanoServerVersion = $NanoServerVersion.Substring(1, $NanoServerVersion.Length - 2)
+
+    $parts = $NanoServerVersion.Split(',')
+    
+    if ($parts.Length -gt 2)
+    {
+        return $NanoServerVersion
+    }
+
+    $minVersion = $parts[0]
+
+    if ($parts.Length -eq 1)
+    {
+        $maxVersion = $minVersion
+    }
+    else
+    {
+        $maxVersion = $parts[1]
+    }
+
+    if ($minVersion -eq $null -and $maxVersion -eq $null)
+    {
+        return $NanoServerVersion
+    }
+
+    $result = ""
+
+    # now we can compare
+    if (-not [string]::IsNullOrWhiteSpace($minVersion))
+    {
+        $result += "minimum NanoServer version of $minVersion"
+
+        if ($minInclusive)
+        {
+            $result += " (inclusive)"
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($maxVersion))
+    {
+        # there is already something in result, so add an and
+        if (-not [string]::IsNullOrWhiteSpace($result))
+        {
+            $result += " and "
+        }
+
+        $result += "maximum NanoServer version of $maxVersion"
+        if ($maxInclusive)
+        {
+            $result += " (inclusive)"
+        }
+    }
+
+    return $result
 }
 
 #endregion Helpers
@@ -1886,155 +2206,6 @@ function Find-Package
         }
     }
 
-    <# Commented out because we are not handling source yet
-    # no source given then search online
-    if ($null -eq $source)
-    {
-    }
-    else
-    {
-        # If name is null or whitespace, interpret as *
-        if ([string]::IsNullOrWhiteSpace($Name))
-        {
-            $Name = "*"
-        }
-
-        if ([System.Management.Automation.WildcardPattern]::ContainsWildcardCharacters($Name))
-        {
-            $wildcardPattern = New-Object System.Management.Automation.WildcardPattern $Name,$script:wildcardOptions
-        }
-
-        # For now, accept offline source like directory
-        if (Test-Path $source)
-        {
-            $count = 0
-            $cabFiles = 0
-            $files = Get-ChildItem $source -File
-
-            # count number of .cab
-            foreach ($file in $files)
-            {
-                if ([System.IO.Path]::GetExtension($file) -eq '.cab')
-                {
-                    $cabFiles += 1
-                }
-            }
-
-            if ($cabFiles -le 0)
-            {
-                return
-            }
-
-            $id = Write-Progress -ParentId 1 -Activity "Finding packages in $source"
-
-            if (-not $id)
-            {
-                $id = 1
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($imagePath))
-            {
-                if (-not ([System.IO.File]::Exists($ImagePath)))
-                {
-                    ThrowError -CallerPSCmdlet $PSCmdlet `
-                        -ExceptionName System.ArgumentException `
-                        -ExceptionMessage "$ImagePath does not exist" `
-                        -ExceptionObject $imagePath `
-                        -ErrorId "InvalidImagePath" `
-                        -ErrorCategory InvalidData
-
-                    return
-                }
-
-                $mountDrive = $null
-
-                # have to mount
-                $mountDrive = New-MountDrive
-        
-                Write-Progress -Activity "Mounting $imagePath to $mountDrive" -PercentComplete 0 -Id $id
-
-                Mount-WindowsImage -ImagePath $imagePath -Index 1 -Path $mountDrive
-
-                try
-                {
-                    foreach ($file in $files)
-                    {
-                        if ([System.IO.Path]::GetExtension($file) -eq '.cab')
-                        {
-                            # scale the percent from 1 to 80 to account for the initial and final step of mounting and dismounting
-                            $percentComplete = (($count*80/$cabFiles) + 10) -as [int]
-                            $count += 1
-
-                            Write-Progress -Activity `
-                                "Getting package information for $($package.PackageName) in $mountDrive" `
-                                -PercentComplete $percentComplete `
-                                -Id $id 
-
-                            $package = Get-WindowsPackage -PackagePath $file.FullName -Path $mountDrive
-
-                            if (Test-PackageWithSearchQuery -fullyQualifiedName $package.PackageName -requiredVersion $RequiredVersion -Name $Name `
-                                -minimumVersion $MinimumVersion -maximumVersion $MaximumVersion -Culture $languageChosen -wildCardPattern $wildcardPattern)
-                            {
-                                Write-Output (New-SoftwareIdentityPackage $package -src $source -InstallLocation $file.FullName)
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    # time to unmount
-                    Write-Progress -Activity "Unmounting image from $mountDrive" -PercentComplete 90 -Id $id    
-                    Remove-MountDrive $mountDrive
-                    Write-Progress -Completed -Id $id -Activity "Completed"
-                }                
-            }
-            else
-            {
-                try
-                {
-                    #online scenario
-                    foreach ($file in $files)
-                    {
-                        # only checks for .cab extension
-                        if ([System.IO.Path]::GetExtension($file) -eq '.cab')
-                        {                            
-                            $percentComplete = ($count*100/$cabFiles) -as [int]
-                            $count += 1
-                                                        
-                            Write-Progress -Activity `
-                                "Getting package information for $($package.PackageName)" `
-                                -PercentComplete $percentComplete `
-                                -Id $id 
-
-                            $package = Get-WindowsPackage -PackagePath $file.FullName -Online
-
-                            if (Test-PackageWithSearchQuery -fullyQualifiedName $package.PackageName -requiredVersion $RequiredVersion -Name $Name `
-                                -minimumVersion $MinimumVersion -maximumVersion $MaximumVersion -Culture $languageChosen -wildCardPattern $wildcardPattern)
-                            {
-                                Write-Output (New-SoftwareIdentityPackage $package -src $source -InstallLocation $file.FullName)
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    Write-Progress -Completed -Id $id -Activity "Completed"
-                }
-            }
-
-        }
-        else
-        {
-            ThrowError -CallerPSCmdlet $PSCmdlet `
-                        -ExceptionName "System.ArgumentException" `
-                        -ExceptionMessage "Source does not point to a valid directory" `
-                        -ErrorId "InvalidSource" `
-                        -ErrorCategory InvalidArgument `
-                        -ExceptionObject $options
-        }
-    }
-    #>
-
     # Let find-windowspackage handle the query
     $convertedRequiredVersion = Convert-Version $requiredVersion
     $convertedMinVersion = Convert-Version $minimumVersion
@@ -2052,7 +2223,6 @@ function Find-Package
         -AllVersions:$AllVersions `
         -Culture $languageChosen `
         -Force:$Force
-#        -Repository $Repository
 
     if ($null -eq $packages)
     {
@@ -2083,8 +2253,6 @@ function Install-Package
 
     $options = $request.Options
 
-    $NoRestart = $false
-
     $force = $false
 
     # check out what options the users give us
@@ -2109,11 +2277,6 @@ function Install-Package
         {
             $languageChosen = $options['Culture']
         }
-
-        if ($options.ContainsKey("NoRestart"))
-        {
-            $NoRestart = $options['NoRestart']
-        }
     }
 
     # if image path is supplied and it points to non existing file, returns
@@ -2135,8 +2298,9 @@ function Install-Package
 
     $name = $resultArray[0]
     $version = $resultArray[1]
-    #$source = $resultArray[2]
     $Culture = $resultArray[3]
+    $Sku = $resultArray[4]
+    $NanoServerVersion = $resultArray[5]
 
     # if culture is a string, set it to null (this means user did not supply culture)
     if ($Culture.Contains(','))
@@ -2165,8 +2329,101 @@ function Install-Package
           
             $availablePackages = @(($script:imagePathCache[$fileKey]).Keys)
         }
+
+        # if this package does not apply to standard, we have to check whether the nano is standard or not
+        if (-not $Sku.Contains("144") -or (-not [string]::IsNullOrWhiteSpace($NanoServerVersion)))
+        {
+            $regKey = $null
+
+            $mountedVhdEdition = "ERROR"
+            $vhdNanoServerVersion = $null
+
+            try
+            {
+                reg load HKLM\NANOSERVERPACKAGEVHDSYS "$mountDrive\Windows\System32\config\SOFTWARE" | Out-Null
+                $regKey = dir 'HKLM:\NANOSERVERPACKAGEVHDSYS\Microsoft\Windows NT'
+                $mountedVHDEdition = $regKey.GetValue("EditionID")
+                $majorVersion = $regKey.GetValue("CurrentMajorVersionNumber")
+                $minorVersion = $regKey.GetValue("CurrentMinorVersionNumber")
+                $buildVersion = $regKey.GetValue("CurrentBuildNumber")
+                $vhdNanoServerVersion = [version]::new($majorVersion, $minorVersion, $buildVersion, 0)
+            }
+            catch
+            {
+                # ERROR
+                $mountedVHDEdition = "ERROR"
+                $vhdNanoServerVersion = $null
+            }
+            finally
+            {
+                try
+                {
+                    if ($regKey -ne $null)
+                    {
+                        $regKey.Handle.Close()
+                        [gc]::Collect()
+                        reg unload HKLM\NANOSERVERPACKAGEVHDSYS | Out-Null
+                    }
+                }
+                catch { }
+            }
+
+            # if this is not applicable to server standard nano
+            if (-not $Sku.Contains("144") -and $mountedVHDEdition -eq "ServerStandardNano")
+            {
+                # cannot be installed
+                # unmount
+                if ($null -ne $mountDrive)
+                {
+                    Write-Verbose "Unmounting mountdrive $mountDrive"
+                    Remove-MountDrive $mountDrive -discard $true
+                }
+
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "$name cannot be installed on this edition of NanoServer" `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($NanoServerVersion) -and -not (NanoServerVersionMatched -dependencyVersionString $NanoServerVersion -version $vhdNanoServerVersion))
+            {
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "The package '$name $version' requires $(ConvertNanoServerVersionToString $NanoServerVersion). But the current Nano Server has version $vhdNanoServerVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions."  `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
+        }
     }
     else {
+        if (IsNanoServer)
+        {
+            # if this is a nano, then systemSKU would be populated after isnanoserver call
+            if (-not $Sku.Contains($script:systemSKU.ToString()))
+            {
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "$name cannot be installed on this edition of NanoServer" `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
+
+            # if this is nanoserver, then we should also have the version populated
+            if (-not (NanoServerVersionMatched -dependencyVersionString $NanoServerVersion -version $script:systemVersion))
+            {
+                ThrowError -CallerPSCmdlet $PSCmdlet `
+                            -ExceptionName System.ArgumentException `
+                            -ExceptionMessage "The package '$name' with version $version requires $(ConvertNanoServerVersionToString $NanoServerVersion). But current Nano Server has version $script:systemVersion which is out of this range. Please see https://github.com/OneGet/NanoServerPackage for instructions." `
+                            -ExceptionObject $fastPackageReference `
+                            -ErrorId FailedToInstall `
+                            -ErrorCategory InvalidData
+            }
+        }
+
         if (-not $force) {
             $availablePackages = @($script:onlinePackageCache.Keys)
         }
@@ -2179,7 +2436,6 @@ function Install-Package
                                                     -Version $convertedVersion `
                                                     -mountDrive $mountDrive `
                                                     -successfullyInstalled ([ref]$success) `
-                                                    -NoRestart:$NoRestart `
                                                     -availablePackages: $availablePackages
 
         foreach ($installedPackage in $installedPackages)
@@ -2585,8 +2841,6 @@ function Uninstall-Package
 
     $options = $request.Options
 
-    $NoRestart = $false
-
     $force = $false
 
     $languageChosen = $null
@@ -2613,11 +2867,6 @@ function Uninstall-Package
         {
             $languageChosen = $options['Culture']
         }
-
-        if ($options.ContainsKey("NoRestart"))
-        {
-            $NoRestart = $options['NoRestart']
-        }
     }
 
     # if image path is supplied and it points to non existing file, returns
@@ -2639,16 +2888,18 @@ function Uninstall-Package
 
     $packageId = $resultArray[4]
 
+    $basePackage = $null
+
     if ($null -eq $languageChosen) {
-        Write-Verbose "No language chosen, removing base"
+        Write-Verbose "No language chosen, removing base too"
 
         $packageFragments = $packageId.Split("~")
 
         $packageFragments[3] = ""
 
-        $packageId = [string]::Join("~", $packageFragments)
+        $basePackage = [string]::Join("~", $packageFragments)
 
-        Write-Verbose "New package id is $packageId"
+        Write-Debug "New package id is $packageId and the base package is $basePackage"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($imagePath)) {
@@ -2664,16 +2915,44 @@ function Uninstall-Package
         try {
             Write-Verbose "Removing $packageId from $mountDrive"
 
-            Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
-
             # time to update the cache since we remove this package
             $fileKey = Get-FileKey -filePath $imagePath
 
             if ($script:imagePathCache.ContainsKey($fileKey)) {
                 $packageDictionary = $script:imagePathCache[$fileKey]
 
-                if ($null -ne $packageDictionary -and $packageDictionary.ContainsKey($packageId)) {
-                    $packageDictionary.Remove($packageId)
+                if ($null -ne $packageDictionary) {
+                    if ($packageDictionary.ContainsKey($packageId)) {
+                        Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
+                        $packageDictionary.Remove($packageId)
+                    }
+                }
+                else {
+                    # nothing in cache
+                    Remove-WindowsPackage -PackageName $packageId -Path $mountDrive | Out-Null
+                }
+            }            
+
+
+            if (-not ([string]::IsNullOrWhiteSpace($basePackage)))
+            {
+                Remove-WindowsPackage -PackageName $basePackage -Path $mountDrive | Out-Null
+            }
+
+            if ($script:imagePathCache.ContainsKey($fileKey)) {
+                $packageDictionary = $script:imagePathCache[$fileKey]
+
+                if ($null -ne $packageDictionary)
+                {
+                    if ($packageDictionary.ContainsKey($packageId))
+                    {
+                        $packageDictionary.Remove($packageId)
+                    }
+
+                    if ((-not [string]::IsNullOrWhiteSpace($basePackage)) -and $packageDictionary.ContainsKey($basePackage))
+                    {
+                        $packageDictionary.Remove($basePackage)
+                    }
                 }
             }
 
@@ -2694,10 +2973,26 @@ function Uninstall-Package
     else {
         Write-Verbose "Uninstalling $packageId online"
 
-        # removing online
-        $messages = Remove-WindowsPackage -PackageName $packageId -Online -NoRestart -WarningAction Ignore
+        $messages = $null
 
-        if ($messages -ne $null -and $messages.RestartNeeded -and (-not $NoRestart))
+        if ($script:onlinePackageCache.ContainsKey($packageId)) {
+            # removing online
+            $messages = Remove-WindowsPackage -PackageName $packageId -Online -NoRestart -WarningAction Ignore
+            $script:onlinePackageCache.Remove($packageId)
+        }
+
+        $restart = $messages -ne $null -and $messages.RestartNeeded
+
+        if (-not [string]::IsNullOrWhiteSpace($basePackage))
+        {
+            if ($script:onlinePackageCache.ContainsKey($basePackage)) {
+                $messages = Remove-WindowsPackage -PackageName $basePackage -Online -NoRestart -WarningAction Ignore       
+                $script:onlinePackageCache.Remove($basePackage)
+                $restart = $restart -or ($messages -ne $null -and $messages.RestartNeeded)
+            }
+        }
+
+        if ($restart)
         {
             Write-Warning "Restart is needed to complete installation"
         }
@@ -2727,8 +3022,6 @@ function Get-DynamicOptions
         # This is for dynamic options used by install/uninstall and get-packages
         Install 
         {
-            # Switch to display culture
-            Write-Output -InputObject (New-DynamicOption -Category $Category -Name "NoRestart" -ExpectedType Switch -IsRequired $false)
             # Provides path to image
             Write-Output -InputObject (New-DynamicOption -Category $category -Name "ToVhd" -ExpectedType File -IsRequired $false)
             Write-Output -InputObject (New-DynamicOption -Category $category -Name "FromVhd" -ExpectedType File -IsRequired $false)
@@ -2774,7 +3067,9 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
     $fastPackageReference = $package.Name + 
                                 $separator + $package.version + 
                                 $separator + $package.Source + 
-                                $separator + $Culture
+                                $separator + $Culture +
+                                $separator + $package.Sku +
+                                $separator + $package.NanoServerVersion
 
     $Name = [System.IO.Path]::GetFileNameWithoutExtension($package.Name)
 
@@ -2790,6 +3085,7 @@ function New-SoftwareIdentityFromWindowsPackageItemInfo
     }
 
     $details["Sku"] = $package.Sku
+    $details["NanoServerVersion"] = $package.NanoServerVersion
 
     $params = @{FastPackageReference = $fastPackageReference;
                 Name = $Name;
@@ -2896,8 +3192,6 @@ function New-SoftwareIdentityPackage
 
     $Culture = $packageNameFractions[3]
     
-    # $details.Add("language", $language)
-
     if (-not [string]::IsNullOrWhiteSpace($packageNameFractions[4]))
     {
         $version = $packageNameFractions[4]
@@ -2991,11 +3285,10 @@ function Install-Online
     [CmdletBinding()]
     param
     (
-        [string[]]$packagePaths,
+        $packagePaths,
         [ref]$restartNeeded
     )
 
-    $installedPackages = @()
     $rollBack = $false
 
     $count = 0;
@@ -3008,21 +3301,96 @@ function Install-Online
 
     try
     {
-        foreach ($packagePath in $packagePaths)
-        {
-            $percentComplete = $count*100/$packagePaths.Count -as [int]
-            Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
-            $count += 1;
+        # first package of each pair is base, second is language
 
-            $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
-    
-            # restart or not
-            if ($messages.RestartNeeded)
+        foreach ($packageTuple in $packagePaths)
+        {
+            $packagePath = $packageTuple.Item1
+
+            $messages = $null
+
+            $restart = $false
+
+            $percentComplete = $count*100/$packagePaths.Count -as [int]
+
+            for($i = 0; $i -lt 2; $i += 1)
             {
-                $restartNeeded.Value = $true
+                # valid base path
+                if (-not [string]::IsNullOrWhiteSpace($packagePath))
+                {
+                    Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
+
+                    try
+                    {
+                        $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore -ErrorAction Ignore
+
+                        if ($messages -ne $null -and $messages.RestartNeeded)
+                        {
+                            $restart = $true
+                        }
+                    }
+                    catch { }
+                }
+
+                # now install the language, even if the base fails, sometimes language will succeed
+                $packagePath = $packageTuple.Item2
+
+                if (-not [string]::IsNullOrWhiteSpace($packagePath))
+                {
+                    Write-Progress -Activity "Installing package $($packagePath)" -PercentComplete $percentComplete -Id $id
+
+                    $hasError = $false
+
+                    # first try
+                    if ($i -eq 0)
+                    {
+                        # try catch for the first time we install
+                        try
+                        {
+                            # don't try catch here because if this fails, that is it
+                            $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
+
+                            # restart or not
+                            if (-not $restart -and $messages -ne $null -and $messages.RestartNeeded)
+                            {
+                                $restart = $true
+                            }
+
+                            if ($restart)
+                            {
+                                $restartNeeded.Value = $true
+                            }
+                        }
+                        catch { $hasError = $true }
+
+                        # no error, break out
+                        if (-not $hasError)
+                        {
+                            break
+                        }
+                    }
+                    else
+                    {
+                        Write-Verbose "Trying to install $packagePath for a second time"
+
+                        # don't try catch here because if this fails, that is it
+                        $messages = Add-WindowsPackage -PackagePath $packagePath -Online -NoRestart -WarningAction Ignore
+
+                        # restart or not
+                        if (-not $restart -and $messages -ne $null -and $messages.RestartNeeded)
+                        {
+                            $restart = $true
+                        }
+
+                        if ($restart)
+                        {
+                            $restartNeeded.Value = $true
+                        }
+                    }
+                }
             }
 
-            $installedPackages += $packagePath
+            $count += 1
         }
     }
     catch
@@ -3038,45 +3406,6 @@ function Install-Online
     finally
     {
         Write-Progress -Completed -Id $id -Activity "Completed"
-    }
-
-    if ($rollBack)
-    {    
-        Write-Verbose "Installation fails, we need to rollback"
-        $id = Write-Progress -ParentId 1 -Activity "Rolling back installed packages"
-        if (-not $id)
-        {
-            $id = 1
-        }
-        
-        $count = 0
-
-        try
-        {
-            foreach ($installedPackage in $installedPackages)
-            {
-                $percentComplete = $count*100/$installedPackages.Count -as [int]
-                Write-Progress -Activity "Uninstalling $installedPackage" -PercentComplete $percentComplete -Id $id
-                $count += 1;
-
-                Write-Verbose "Uninstalling package $installedPackage"
-                Remove-WindowsPackage -PackagePath $installedPackage -Online
-            }
-        }
-        catch
-        {
-            $rollBack = $true
-            ThrowError -CallerPSCmdlet $PSCmdlet `
-                        -ExceptionName $_.Exception.GetType().FullName `
-                        -ExceptionMessage $_.Exception.Message `
-                        -ExceptionObject $RequiredVersion `
-                        -ErrorId FailedToUnInstall `
-                        -ErrorCategory InvalidOperation
-        }
-        finally
-        {
-            Write-Progress -Completed -Id $id -Activity "Completed"
-        }
     }
 
     # returns whether we installed

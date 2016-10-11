@@ -1,15 +1,20 @@
-﻿$vhdPath = "C:\test\something.vhd"
+﻿#
+#
+# you need to modify 
+# 1. $vhdPath to match your Nano Vm
+# 2. $requiredVersion needs to be updated if there are new packages published
+#
+#
+
+$vhdPath = "C:\test\rtmRefreshStdEdition.vhd"
 $culture = (Get-Culture).Name
 $dcbPackage = "Microsoft-NanoServer-DCB-Package"
 $computePackage = "Microsoft-NanoServer-Compute-Package"
-$scvmmPackage = "Microsoft-NanoServer-SCVMM-Package"
 $containersPackage = "Microsoft-NanoServer-Containers-Package"
-$scvmmCompute = "Microsoft-NanoServer-SCVMM-Compute-Package"
 $providerName = "NanoServerPackage"
-$requiredVersion = "10.0.14300.1000"
+$requiredVersion = "10.0.14393.0"
 
 Describe "Install-NanoServerPackage Stand-Alone" {
-
     It "ERROR: Install with no name" {
         { Install-NanoServerPackage -Name '' } | should throw
     }
@@ -23,92 +28,54 @@ Describe "Install-NanoServerPackage Stand-Alone" {
     }
 
     It "Install DCB package" {
-        try {
-            $package = Install-NanoServerPackage -Name $dcbPackage -Force
+        $package = Install-NanoServerPackage -Name $dcbPackage -Force
 
-            $package.Name | should match $dcbPackage
-            $package.Culture | should match $culture
+        $package.Name | should match $dcbPackage
+        $package.Culture | should match $culture
 
-            $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture
-            $getPackage.Name | should match $package.Name
-            $getPackage.Culture | should match $package.Culture
-        }
-        finally {
-            if ($package -ne $null) {
-                Uninstall-Package -Name $dcbPackage -Force -ProviderName NanoServerPackage
-
-                $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -ErrorAction SilentlyContinue
-                ($getPackage -eq $null) | should be $true
-            }
-        }
+        $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture
+        $getPackage.Name | should match $package.Name
+        $getPackage.Culture | should match $package.Culture
     }
 
     It "Install DCB package to vhd" {
-        try {
-            $package = Install-NanoServerPackage -Name $dcbPackage -ToVhd $vhdPath -Force
+        $package = Install-NanoServerPackage -Name $dcbPackage -ToVhd $vhdPath -Force
 
-            $package.Name | should match $dcbPackage
-            $package.Culture | should match $culture
+        $package.Name | should match $dcbPackage
+        $package.Culture | should match $culture
 
-            $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -FromVhd $vhdPath
-            $getPackage.Name | should match $package.Name
-            $getPackage.Culture | should match $package.Culture
-        }
-        finally {
-            if ($package -ne $null) {
-                Uninstall-Package -Name $dcbPackage -ProviderName NanoServerPackage -FromVhd $vhdPath -Force
-                $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -FromVhd $vhdPath -ErrorAction SilentlyContinue
-                ($getPackage -eq $null) | should be $true
-            }
-        }
+        $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -FromVhd $vhdPath
+        $getPackage.Name | should match $package.Name
+        $getPackage.Culture | should match $package.Culture
+    }
+
+    It "Install compute package with wrong culture" {
+        $locale="it-it"
+        $package = Install-NanoServerPackage -Name $dcbPackage -Culture $locale -Force
+        $package.Name | should match $dcbPackage
+        $package.Culture | should match $locale
     }
 
     It "Install compute package with correct culture" {
-        try {
-            $package = Install-NanoServerPackage -Name $computePackage -Culture $culture -Force
+        $package = Install-NanoServerPackage -Name $computePackage -Culture $culture -Force
 
-            $package.Name | should match $computePackage
-            $package.Culture | should match $culture
+        $package.Name | should match $computePackage
+        $package.Culture | should match $culture
 
-            $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture
-            $getPackage.Name | should match $package.Name
-            $getPackage.Culture | should match $package.Culture
-        }
-        finally {
-            if ($package -ne $null) {
-                Uninstall-Package -Name $computePackage -ProviderName NanoServerPackage -Force
-                $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -ErrorAction SilentlyContinue
-                ($getPackage -eq $null) | should be $true
-            }
-        }
+        $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture
+        $getPackage.Name | should match $package.Name
+        $getPackage.Culture | should match $package.Culture
     }
 
     It "Install compute package with correct culture to vhd" {
-        try {
-            $package = Install-NanoServerPackage -Name $computePackage -Culture $culture -ToVhd $vhdPath -Force
+        $package = Install-NanoServerPackage -Name $computePackage -Culture $culture -ToVhd $vhdPath -Force
 
-            $package.Name | should match $computePackage
-            $package.Culture | should match $culture
+        $package.Name | should match $computePackage
+        $package.Culture | should match $culture
 
-            $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -FromVhd $vhdPath
-            $getPackage.Name | should match $package.Name
-            $getPackage.Culture | should match $package.Culture
-        }
-        finally {
-            if ($package -ne $null) {
-                Uninstall-Package -Name $computePackage -Culture $culture -ToVhd $vhdPath -Force
-            }
-        }
-    }
-
-    It "Install package with dependencies" {
-        $packages = Install-NanoServerPackage -Name $scvmmCompute -RequiredVersion $requiredVersion -Force
-
-        $packages.Count | should be 3
-
-        $getPackage = Get-Package -ProviderName $providerName -Name $scvmmCompute,$computePackage,$scvmmPackage
-
-        $getPackage.Count | should be 3
+        $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture -FromVhd $vhdPath
+        $getPackage.Name | should match $package.Name
+        $getPackage.Culture | should match $package.Culture
     }
 
     It "Install compute package by piping from find" {
@@ -206,13 +173,19 @@ Describe "Install-NanoServerPackage With OneGet" {
         $getPackage.Culture | should match $package.Culture
     }
 
+    It "Install compute package with wrong culture" {        
+        $locale="it-it"
+        $package = Install-Package -ProviderName $providerName -Name $dcbPackage -Culture $locale -Force -ErrorAction SilentlyContinue
+        $package.Culture | should match $locale
+    }
+
     It "Install compute package with correct culture" {
         $package = Install-Package -ProviderName $providerName -Name $computePackage -Culture $culture -Force
 
         $package.Name | should match $computePackage
         $package.Culture | should match $culture
 
-        $getPackage = Get-Package -ProviderName $providerName-Name $package.Name -Culture $package.Culture
+        $getPackage = Get-Package -ProviderName $providerName -Name $package.Name -Culture $package.Culture
         $getPackage.Name | should match $package.Name
         $getPackage.Culture | should match $package.Culture
     }
@@ -229,7 +202,7 @@ Describe "Install-NanoServerPackage With OneGet" {
     }
 
     It "Install compute package by piping from find" {
-        $package = (Find-Package -ProviderName $providerName -Name *compute* | Install-Package -Force)
+        $package = (Find-Package -ProviderName $providerName -Name $computePackage | Install-Package -Force)
 
         $package.Name | should match $computePackage
         $package.Culture | should match $culture
