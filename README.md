@@ -5,9 +5,9 @@ A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to
 The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016, and vice versa. It DOES NOT support Nano Server with newer version of TP5. Please make sure you use the correct version of NanoServerPackage provider according to your Nano Server version. If you have TP5 Nano Server, you will specify both the provider version and package version.
 
 ## Installing the provider
-To install the latest version of the provider 1.0.0.0 that works for OS newer than 10.0.14300.1000, use the following steps.
+To install the latest version of the provider 1.0.1.0 that works for OS newer than 10.0.14300.1000, use the following steps.
 ```
-Save-Module -Path 'C:\Program Files\WindowsPowerShell\Modules\' -Name NanoServerPackage -RequiredVersion 1.0.0.0
+Save-Module -Path 'C:\Program Files\WindowsPowerShell\Modules\' -Name NanoServerPackage -minimumVersion 1.0.1.0
 Import-PackageProvider NanoServerPackage
 ```
 To install the TP5 version of the provider 0.1.1.0 that works for TP5 OS version 10.0.14300.1000, use the following steps.
@@ -209,10 +209,10 @@ Get-Package -ProviderName NanoServerPackage -FromVhd C:\OfflineVhd.vhd -DisplayC
 ```
 
 ## Version
-1.0.0.0
+1.0.1.0
 
 ## Version History
-#### 1.0.0.0
+#### 1.0.1.0
 Public release for Nano Package Provider that works for WS2016 Nano Server
 #### 0.1.1.0
 Initial public release for Nano Package Provider that works for TP5 Nano Server
@@ -221,9 +221,10 @@ Initial public release for Nano Package Provider that works for TP5 Nano Server
 This module has no dependencies
 
 ## Known Issues
-This provider does not support PowerShell Direct session.
+1. This provider does not support PowerShell Direct session.
+2.	Using the NanoServerPackage provider 1.0.1.0 to search for packages fails in Windows Containers. As a workaround, you may use the NanoServerPackage provider on another machine to download the packages, then copy and DISM install them in the container.
 
-## Fixed issues in v1.0.0.0
+## Fixed issues in v1.0.1.0
 1. In v0.1.1.0, you cannot install Microsoft-NanoServer-IIS-Package and Microsoft-NanoServer-SCVMM-Package online. There are two workarounds:
 
    i. Install another package that will require reboot such as Microsoft-NanoServer-Storage-Package first and without rebooting, install the required package.
