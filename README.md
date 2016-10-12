@@ -32,11 +32,11 @@ Install-Package
 Get-Package
 ```
 
-The provider needs to be loaded in PowerShell before you can use any of the cmdlet in the second set (otherwise, OneGet may not use NanoServerPackage when running those cmdlets). You can load the provider either by running ```Import-PackageProvider NanoServerPackage``` or using any of the generic OneGet cmdlet with ```-ProviderName NanoServerPackage``` (for example: ```Find-Package -ProviderName NanoServerPackage```)
+The provider needs to be loaded in PowerShell before you can use any of the cmdlets. You can load the provider  by running ```Import-PackageProvider NanoServerPackage```.
 
 ## Searching for Windows Packages
 
-Both ```Find-NanoServerPackage``` and ```Find-Package``` search and return a list of Windows Packages available in the online repository. You may want to provide ```-ProviderName NanoServerPackage``` to ```Find-Package``` so that OneGet will not use other providers. In addition, when using the generic OneGet cmdlet, you can also use a switch ```-DisplayCulture``` so the culture of the packages returned will be displayed.
+Both ```Find-NanoServerPackage``` and ```Find-Package``` search and return a list of Windows Packages available in the online repository. You may want to provide ```-ProviderName NanoServerPackage``` to ```Find-Package``` so that OneGet will not use other providers. In addition, when using the generic OneGet cmdlet, you can also use a ```-DisplayCulture``` switch so the culture of the packages will be displayed.
 
 ##### Example 1
 Find the latest version of any Windows Packages that match a given name. Wildcard is also accepted
@@ -106,9 +106,9 @@ Find-Package *NPDS* -ProviderName NanoServerPackage -AllVersions -DisplayCulture
 ```
 
 ## Installing Windows Packages Online or Offline
-You can install a Windows Package using either ```Install-NanoServerPackage``` or ```Install-Package```. If you want to install the package to an offline NanoServer image, you can specify the path to the offline image with ```-ToVhd``` parameter. Otherwise, the cmdlets will install the package to the local machine.
+You can install a Windows Package (including its dependency packages, if any) using either ```Install-NanoServerPackage``` or ```Install-Package```. If you want to install the package to an offline NanoServer image, you can specify the path to the offline image with ```-ToVhd``` parameter. Otherwise, the cmdlets will install the package to the local machine.
 
-Both cmdlets accept pipeline result from the search cmdlets. The culture of the package has to match the culture of the machine you are installing it to for the package to work properly. The cmdlets have auto-detection logic that will determine the suitable culture. However, you can also use ```-Culture``` parameter to specify the culture that you want to use for the installation.
+Both cmdlets accept pipeline result from the search cmdlets. The culture of the package has to match the culture of the machine you are installing it to for the package to work properly. The cmdlets have auto-detection logic that will determine the suitable culture. 
 
 ##### Example 1
 Installing the latest version of the Containers package to the local machine
@@ -147,7 +147,7 @@ Find-Package -ProviderName NanoServerPackage *Containers* | Install-Package -Dis
 ```
 
 ## Dowloading Windows Packages
-You can download a Windows Package without installing it by using ```Save-NanoServerPackage``` or ```Save-Package``` cmdlets. Both cmdlets accept pipeline result from the search cmdlets. These cmdlets will download both the base package and the language package. If you do not specify the ```-Culture``` parameter, the culture of the local machine will be used.
+You can download a Windows Package (including its dependency packages, if any) without installing it by using ```Save-NanoServerPackage``` or ```Save-Package``` cmdlets. Both cmdlets accept pipeline result from the search cmdlets. These cmdlets will download both the base package and the language package. If you do not specify the ```-Culture``` parameter, the culture of the local machine will be used.
 
 ##### Example 1
 Download and save the NPDS package to a directory that matches the wildcard path using the culture of the local machine.
