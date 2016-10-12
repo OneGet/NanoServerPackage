@@ -1,11 +1,11 @@
 # NanoServerPackage Provider
-A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to find and install Optional Windows Packages (Windows feature and role) for NanoServer. For general information about these packages, please refer to the <a href="https://technet.microsoft.com/en-us/library/mt126167(v=ws.12).aspx">guide on Getting Started with Nano Server</a>.
+A PackageManagement (aka <a href="http://www.oneget.org">OneGet</a>) provider to find and install Optional Windows Packages (Windows feature and role) for NanoServer. For general information about these packages, please refer to the <a href="https://technet.microsoft.com/en-us/windows-server-docs/get-started/deploy-nano-server">guide on Deploy Nano Server</a>.
 
 ##### Note 
-The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016, and vice versa. It DOES NOT support Nano Server with newer version of TP5. Please make sure you use the correct version of NanoServerPackage provider according to your Nano Server version. If you have TP5 Nano Server, you will specify both the provider version and package version.
+The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGallery.com only supports Nano Server with Technical Preview 5 (TP5) version, i.e. 10.0.14300.1000, that is public in April 2016, and vice versa. It DOES NOT support Nano Server WS2016 GA version 10.0.14393.0. Please make sure to update your Nano Server to WS2016 GA version and install the latest version of the provider. 
 
 ## Installing the provider
-To install the latest version of the provider 1.0.1.0 that works for OS newer than 10.0.14300.1000, use the following steps.
+To install the latest version of the provider 1.0.1.0 that works for WS2016 GA Nano Server 10.0.14393.0, use the following steps.
 ```
 Save-Module -Path 'C:\Program Files\WindowsPowerShell\Modules\' -Name NanoServerPackage -minimumVersion 1.0.1.0
 Import-PackageProvider NanoServerPackage
@@ -76,11 +76,11 @@ Find-Package -ProviderName NanoServerPackage -Culture en-us -DisplayCulture
 ##### Example 4
 Find Windows Packages that have a certain version using ```-RequiredVersion```
 ```
-Find-NanoServerPackage -RequiredVersion 10.0.14300.100
+Find-NanoServerPackage -RequiredVersion 10.0.14393.0
 ```
 OR
 ```
-Find-Package -ProviderName NanoServerPackage -RequiredVersion 10.0.14300.100 -DisplayCulture
+Find-Package -ProviderName NanoServerPackage -RequiredVersion 10.0.14393.0 -DisplayCulture
 ```
 
 ##### Example 5
@@ -108,7 +108,7 @@ Find-Package *NPDS* -ProviderName NanoServerPackage -AllVersions -DisplayCulture
 ## Installing Windows Packages Online or Offline
 You can install a Windows Package using either ```Install-NanoServerPackage``` or ```Install-Package```. If you want to install the package to an offline NanoServer image, you can specify the path to the offline image with ```-ToVhd``` parameter. Otherwise, the cmdlets will install the package to the local machine.
 
-Both cmdlets accept pipeline result from the search cmdlets. Please note that these cmdlets currently do not handle dependencies so you will have to install a package and their dependencies in the correct order. Also, the culture of the package has to match the culture of the machine you are installing it to for the package to work properly. The cmdlets have auto-detection logic that will determine the suitable culture. However, you can also use ```-Culture``` parameter to specify the culture that you want to use for the installation.
+Both cmdlets accept pipeline result from the search cmdlets. The culture of the package has to match the culture of the machine you are installing it to for the package to work properly. The cmdlets have auto-detection logic that will determine the suitable culture. However, you can also use ```-Culture``` parameter to specify the culture that you want to use for the installation.
 
 ##### Example 1
 Installing the latest version of the Containers package to the local machine
@@ -121,26 +121,12 @@ Install-Package -ProviderName NanoServerPackage -Name Microsoft-NanoServer-Conta
 ```
 
 ##### Example 2
-Install version 10.0.14300.1000 version of the Containers package to the local machine
+Install a package that depends on other packages. In this case, the dependency packages will be installed as well.
 ```
-Install-NanoServerPackage -Name Microsoft-NanoServer-Containers-Package -RequiredVersion 10.0.14300.1000
-```
-OR
-```
-Install-Package -ProviderName NanoServerPackage -Name Microsoft-NanoServer-Containers-Package -DisplayCulture -RequiredVersion 10.0.14300.1000
+Find-NanoServerPackage *scvmm-compute* | install-package
 ```
 
 ##### Example 3
-Install the latest version of the Compute package to the local machine. This latest version has to be less than 11.0
-```
-Install-NanoServerPackage -Name Microsoft-NanoServer-Compute-Package -MaximumVersion 11.0
-```
-OR
-```
-Install-Package -Name Microsoft-NanoServer-Compute-Package -MaximumVersion 11.0 -DisplayCulture
-```
-
-##### Example 4
 Install the latest version of the DCB package to an offline NanoServer image.
 ```
 Install-NanoServerPackage -Name Microsoft-NanoServer-DCB-Package -ToVhd C:\OfflineVhd.vhd
@@ -150,7 +136,7 @@ OR
 Install-Package -Name Microsoft-NanoServer-DCB-Package -ToVhd C:\OfflineVhd.vhd -ProviderName NanoServerPackage -DisplayCulture
 ```
 
-##### Example 5
+##### Example 4
 Install the Containers package by piping the result from the search cmdlets. Please do not specify ```-ProviderName``` on the ```Install-Package``` cmdlet if you use it this way.
 ```
 Find-NanoServerPackage *Containers* | Install-NanoServerPackage
@@ -161,7 +147,7 @@ Find-Package -ProviderName NanoServerPackage *Containers* | Install-Package -Dis
 ```
 
 ## Dowloading Windows Packages
-You can download a WindowsPackage without installing it by using ```Save-NanoServerPackage``` or ```Save-Package``` cmdlets. Both cmdlets accept pipeline result from the search cmdlets. These cmdlets will download both the feature package and the culture package. If you do not specify the ```-Culture``` parameter, the culture of the local machine will be used.
+You can download a Windows Package without installing it by using ```Save-NanoServerPackage``` or ```Save-Package``` cmdlets. Both cmdlets accept pipeline result from the search cmdlets. These cmdlets will download both the base package and the language package. If you do not specify the ```-Culture``` parameter, the culture of the local machine will be used.
 
 ##### Example 1
 Download and save the NPDS package to a directory that matches the wildcard path using the culture of the local machine.
@@ -174,32 +160,32 @@ Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-NPDS-Package -
 ```
 
 ##### Example 2
-Download and save version 10.0.14300.100 of the NPDS package with de-de culture to the current directory.
+Download and save version 10.0.14393.0 of the NPDS package with de-de culture to the current directory.
 ```
-Save-NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14300.100
+Save-NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14393.0
 ```
 OR
 ```
-Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14300.100 -DisplayCulture
+Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14393.0 -DisplayCulture
 ```
 
 ##### Example 3
-Download and save the it-it version of the Defenders package to the current directory by piping the results from the search cmdlets. Please do not specify ```-ProviderName``` in the ```Save-Package``` cmdlet if you piped result to it.
+Download and save the it-it culture of the Shielded VM package to the current directory by piping the results from the search cmdlets. The dependency package will be downloaded as well.
 ```
-Find-NanoServerPackage -Name *Defenders* -Culture it-it | Save-NanoServerPackage -Path .\
+Find-NanoServerPackage -Name *shielded* -Culture it-it | Save-NanoServerPackage -Path .\
 ```
 OR
 ```
-Find-Package -ProviderName NanoServerPackage *Defenders* -Culture it-it | Save-Package -Path .\ -DisplayCulture
+Find-Package -ProviderName NanoServerPackage *shielded* -Culture it-it | Save-Package -Path .\ -DisplayCulture
 ```
 
 ## Inventory what Windows Packages are installed
 You can search for installed packages on your local NanoServer machine or an offline NanoServer image using ```Get-Package```.
 
 ##### Example 1
-Search for all Windows Packages installed on the local machine that has version 10.0.14300.1000.
+Search for all Windows Packages installed on the local machine.
 ```
-Get-Package -ProviderName NanoServerPackage -RequiredVersion 10.0.14300.100 -DisplayCulture
+Get-Package -ProviderName NanoServerPackage -DisplayCulture
 ```
 
 ##### Example 2
@@ -213,7 +199,7 @@ Get-Package -ProviderName NanoServerPackage -FromVhd C:\OfflineVhd.vhd -DisplayC
 
 ## Version History
 #### 1.0.1.0
-Public release for Nano Package Provider that works for WS2016 Nano Server
+Public release for Nano Package Provider that works for Nano Server WS2016 GA version 
 #### 0.1.1.0
 Initial public release for Nano Package Provider that works for TP5 Nano Server
 
