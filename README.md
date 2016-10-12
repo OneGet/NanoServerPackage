@@ -199,7 +199,7 @@ Get-Package -ProviderName NanoServerPackage -FromVhd C:\OfflineVhd.vhd -DisplayC
 
 ## Version History
 #### 1.0.1.0
-Public release for Nano Package Provider that works for Nano Server WS2016 GA version 
+Public release for NanoServerPackage Provider that works for Nano Server WS2016 GA version 
 #### 0.1.1.0
 Initial public release for Nano Package Provider that works for TP5 Nano Server
 
