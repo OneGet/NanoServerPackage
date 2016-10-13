@@ -7,7 +7,7 @@ The public version 0.1.1.0 of NanoServerPackage Provider from the PowerShellGall
 ## Installing the provider
 To install the latest version of the provider 1.0.1.0 that works for WS2016 GA Nano Server 10.0.14393.0, use the following steps.
 ```
-Save-Module -Path 'C:\Program Files\WindowsPowerShell\Modules\' -Name NanoServerPackage -minimumVersion 1.0.1.0
+Save-Module -Path "$env:programfiles\WindowsPowerShell\Modules\" -Name NanoServerPackage -minimumVersion 1.0.1.0
 Import-PackageProvider NanoServerPackage
 ```
 To install the TP5 version of the provider 0.1.1.0 that works for TP5 OS version 10.0.14300.1000, use the following steps.
