@@ -50,13 +50,13 @@ Both ```Find-NanoServerPackage``` and ```Find-Package``` search and return a lis
 ##### Example 1
 Find the latest version of any Windows Packages that match a given name. Wildcard is also accepted
 ```
-Find-NanoServerPackage -Name Microsoft-NanoServer-NPDS-Package
-Find-NanoServerPackage -Name *NPDS*
+Find-NanoServerPackage -Name Microsoft-NanoServer-Containers-Package
+Find-NanoServerPackage -Name *Containers*
 ```
 OR
 ```
-Find-Package -ProviderName NanoServerPackage -Name Microsoft-NanoServerPackage-NPDS-Package -DisplayCulture
-Find-Package -ProviderName NanoServerPackage -Name *NPDS* -DisplayCulture
+Find-Package -ProviderName NanoServerPackage -Name Microsoft-NanoServerPackage-Containers-Package -DisplayCulture
+Find-Package -ProviderName NanoServerPackage -Name *Containers* -DisplayCulture
 ```
 
 ##### Example 2
@@ -105,13 +105,13 @@ Find-Package -ProviderName NanoServerPackage -MinimumVersion 10.0 -DisplayCultur
 ##### Example 6
 Find all available versions of a Windows Package using ```-AllVersions``` switch. This switch can also be used with ```-MinimumVersion``` and ```-MaximumVersion``` but not with ```-RequiredVersion```.
 ```
-Find-NanoServerPackage *NPDS* -AllVersions
-Find-NanoServerPackage *NPDS* -AllVersions -MinimumVersion 10.0
+Find-NanoServerPackage *Containers* -AllVersions
+Find-NanoServerPackage *Containers* -AllVersions -MinimumVersion 10.0
 ```
 OR
 ```
-Find-Package *NPDS* -ProviderName NanoServerPackage -AllVersions -DisplayCulture
-Find-Package *NPDS* -ProviderName NanoServerPackage -AllVersions -DisplayCulture -MinimumVersion 10.0
+Find-Package *Containers* -ProviderName NanoServerPackage -AllVersions -DisplayCulture
+Find-Package *Containers* -ProviderName NanoServerPackage -AllVersions -DisplayCulture -MinimumVersion 10.0
 ```
 
 ## Installing Windows Packages Online or Offline
@@ -159,23 +159,23 @@ Find-Package -ProviderName NanoServerPackage *Containers* | Install-Package -Dis
 You can download a Windows Package (including its dependency packages, if any) without installing it by using ```Save-NanoServerPackage``` or ```Save-Package``` cmdlets. Both cmdlets accept pipeline result from the search cmdlets. These cmdlets will download both the base package and the language package. If you do not specify the ```-Culture``` parameter, the culture of the local machine will be used.
 
 ##### Example 1
-Download and save the NPDS package to a directory that matches the wildcard path using the culture of the local machine.
+Download and save the Containers package to a directory that matches the wildcard path using the culture of the local machine.
 ```
-Save-NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path C:\t*p\
+Save-NanoServerPackage Microsoft-NanoServer-Containers-Package -Path C:\
 ```
 OR
 ```
-Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path C:\t*p\ -DisplayCulture
+Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-Containers-Package -Path C:\ -DisplayCulture
 ```
 
 ##### Example 2
-Download and save version 10.0.14393.0 of the NPDS package with de-de culture to the current directory.
+Download and save version 10.0.14393.0 of the Containers package with de-de culture to the current directory.
 ```
-Save-NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14393.0
+Save-NanoServerPackage Microsoft-NanoServer-Containers-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14393.0
 ```
 OR
 ```
-Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-NPDS-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14393.0 -DisplayCulture
+Save-Package -ProviderName NanoServerPackage Microsoft-NanoServer-Containers-Package -Path .\ -Culture de-de -RequiredVersion 10.0.14393.0 -DisplayCulture
 ```
 
 ##### Example 3
