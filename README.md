@@ -115,6 +115,10 @@ Find-Package *Containers* -ProviderName NanoServerPackage -AllVersions -DisplayC
 ```
 
 ## Installing Windows Packages Online or Offline
+
+>`NOTE`
+> If you install an optional Nano Server package from media or online repository, it won't have recent security fixes included. To avoid a version mismatch between the optional packages and base operating system, you should install the [latest cumulative update](https://technet.microsoft.com/windows-server-docs/get-started/update-nano-server) immediately after installing any optional packages and **before** restarting the server. 
+
 You can install a Windows Package (including its dependency packages, if any) using either ```Install-NanoServerPackage``` or ```Install-Package```. If you want to install the package to an offline NanoServer image, you can specify the path to the offline image with ```-ToVhd``` parameter. Otherwise, the cmdlets will install the package to the local machine.
 
 Both cmdlets accept pipeline result from the search cmdlets. The culture of the package has to match the culture of the machine you are installing it to for the package to work properly. The cmdlets have auto-detection logic that will determine the suitable culture. 
